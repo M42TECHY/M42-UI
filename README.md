@@ -26,35 +26,35 @@ that folder (HTML, Bootstrap, its own UI kit), checks it in a headless browser, 
 It runs one small model, **Qwen3.5-4B** (or **Qwen3.5-2B** on an 8 GB PC), through [llama.cpp](https://github.com/ggml-org/llama.cpp). It is made
 for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s).
 
-## ✨ Features
+## <img src="docs/icons/sparkles.svg" width="30" height="30" alt="" align="top"> Features
 
-| | |
-| --- | --- |
-| 🌐 **Landing pages** | product, shop, clinic, restaurant, event pages with real photos |
-| 🧊 **3D landing pages** | 3D hero scenes and motion, built with three.js |
-| 📊 **Admin panels** | dashboards, CRM, POS: tables, charts, kanban, forms that work |
-| 🖼️ **Design from a picture** | attach a design you like; its layout and colours are followed |
-| ✏️ **Edit by asking** | "make the header dark", "add a pricing section": only that part is rebuilt |
-| ✅ **Checked in a real browser** | links, contrast, phone width and JavaScript errors |
-| 🎤 **Voice input** | speak in Tamil, Tanglish or English |
-| 🔒 **Private** | everything stays on your PC |
+| | | |
+| :---: | --- | --- |
+| <img src="docs/icons/globe.svg" width="22" height="22" alt=""> | **Landing pages** | product, shop, clinic, restaurant, event pages with real photos |
+| <img src="docs/icons/box.svg" width="22" height="22" alt=""> | **3D landing pages** | 3D hero scenes and motion, built with three.js |
+| <img src="docs/icons/layout-dashboard.svg" width="22" height="22" alt=""> | **Admin panels** | dashboards, CRM, POS: tables, charts, kanban, forms that work |
+| <img src="docs/icons/image.svg" width="22" height="22" alt=""> | **Design from a picture** | attach a design you like; its layout and colours are followed |
+| <img src="docs/icons/wand-sparkles.svg" width="22" height="22" alt=""> | **Edit by asking** | "make the header dark", "add a pricing section": only that part is rebuilt |
+| <img src="docs/icons/shield-check.svg" width="22" height="22" alt=""> | **Checked in a real browser** | links, contrast, phone width and JavaScript errors |
+| <img src="docs/icons/mic.svg" width="22" height="22" alt=""> | **Voice input** | speak in Tamil, Tanglish or English |
+| <img src="docs/icons/lock.svg" width="22" height="22" alt=""> | **Private** | everything stays on your PC |
 
-## 📸 What it builds
+## <img src="docs/icons/images.svg" width="30" height="30" alt="" align="top"> What it builds
 
 Real pages built by M42 UI on a 16 GB PC, shown as they came out.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/electronics-3d-landing.jpg" alt="Electronics shop, 3D landing page"><br><b>🧊 Electronics shop</b> · 3D landing page</td>
-    <td width="50%"><img src="docs/screenshots/dental-3d-landing.jpg" alt="Dental clinic, 3D landing page"><br><b>🧊 Dental clinic</b> · 3D landing page</td>
+    <td width="50%"><img src="docs/screenshots/electronics-3d-landing.jpg" alt="Electronics shop, 3D landing page"><br><img src="docs/icons/box.svg" width="18" height="18" alt=""> <b>Electronics shop</b> · 3D landing page</td>
+    <td width="50%"><img src="docs/screenshots/dental-3d-landing.jpg" alt="Dental clinic, 3D landing page"><br><img src="docs/icons/box.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · 3D landing page</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/crm-admin-panel.jpg" alt="Real estate CRM admin panel"><br><b>📊 Real estate CRM</b> · admin panel</td>
-    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.jpg" alt="Electronics e-commerce landing page"><br><b>🛒 Electronics store</b> · e-commerce landing page</td>
+    <td width="50%"><img src="docs/screenshots/crm-admin-panel.jpg" alt="Real estate CRM admin panel"><br><img src="docs/icons/layout-dashboard.svg" width="18" height="18" alt=""> <b>Real estate CRM</b> · admin panel</td>
+    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.jpg" alt="Electronics e-commerce landing page"><br><img src="docs/icons/shopping-cart.svg" width="18" height="18" alt=""> <b>Electronics store</b> · e-commerce landing page</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dental-landing.jpg" alt="Dental clinic landing page"><br><b>🦷 Dental clinic</b> · landing page</td>
-    <td width="50%"><img src="docs/screenshots/firecrackers-landing.jpg" alt="Firecrackers shop landing page"><br><b>🎆 Firecrackers shop</b> · landing page</td>
+    <td width="50%"><img src="docs/screenshots/dental-landing.jpg" alt="Dental clinic landing page"><br><img src="docs/icons/smile.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · landing page</td>
+    <td width="50%"><img src="docs/screenshots/firecrackers-landing.jpg" alt="Firecrackers shop landing page"><br><img src="docs/icons/party-popper.svg" width="18" height="18" alt=""> <b>Firecrackers shop</b> · landing page</td>
   </tr>
 </table>
 
@@ -126,7 +126,7 @@ M42-UI/
   knowledge/    the UIGEN-T2 examples index (optional, not in the repository)
 ```
 
-## 💖 Support M42 UI
+## <img src="docs/icons/heart.svg" width="30" height="30" alt="" align="top"> Support M42 UI
 
 M42 UI is free and runs on your own PC. If it saved you time or you like where it is going, a small donation
 keeps it growing: more page kinds, better 3D, faster on ordinary PCs.
@@ -140,10 +140,12 @@ keeps it growing: more page kinds, better 3D, faster on ordinary PCs.
 
 <img src="docs/upi-qr.jpg" alt="UPI QR code: muthupandi0297@oksbi" width="240">
 
-⭐ Not able to donate? A star on this repository helps others find it.
+<img src="docs/icons/star.svg" width="18" height="18" alt=""> Not able to donate? A star on this repository helps others find it.
 
 </div>
 
 ## Licence
 
 See `THIRD_PARTY_NOTICES.md` for the bundled libraries and data and for the models and datasets you download.
+
+README icons: [Lucide](https://lucide.dev) (ISC licence, `docs/icons/LICENSE-lucide.txt`).
