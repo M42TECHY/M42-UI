@@ -1,10 +1,10 @@
 <div align="center">
 
-# M42 UI
-
-### Build websites with AI, on your own PC.
-
-Landing pages · 3D landing pages · Admin panels · Multi-page sites
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/brand/banner-light.svg">
+  <img src="docs/brand/banner-dark.svg" alt="M42 UI: build websites with AI, on your own PC" width="100%">
+</picture>
 
 ![No cloud](https://img.shields.io/badge/No_cloud-100%25_local-16a34a?style=for-the-badge)
 ![No API key](https://img.shields.io/badge/No_API_key-free-2563eb?style=for-the-badge)
