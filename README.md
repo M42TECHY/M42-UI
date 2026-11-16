@@ -11,7 +11,7 @@
 ![Runs on CPU](https://img.shields.io/badge/Runs_on-ordinary_CPU-9333ea?style=for-the-badge)
 ![Windows · Linux · macOS](https://img.shields.io/badge/Windows_·_Linux_·_macOS-supported-f97316?style=for-the-badge)
 
-[**See what it builds**](#-what-it-builds) · [**Install**](#install-windows-linux-macos) · [**Support the project**](#-support-m42-ui)
+[**See what it builds**](#-what-it-builds) · [**Install**](#-install) · [**Support the project**](#-support-m42-ui)
 
 <img src="docs/screenshots/electronics-3d-landing.webp" alt="A 3D landing page built by M42 UI" width="90%">
 
@@ -85,43 +85,127 @@ Real pages built by M42 UI on a 16 GB PC, shown as they came out.
 6. **Checks**: classes and links, contrast, phone width, JavaScript errors in a real browser.
 7. **Changes**: "make the header dark", "add a pricing section": only that page and section are made again.
 
-## Install (Windows, Linux, macOS)
+## <img src="docs/icons/download.svg" width="30" height="30" alt="" align="top"> Install
 
-Download this repository (Code → Download ZIP, or `git clone`), then run the installer for your system:
+> [!TIP]
+> One installer for Windows, macOS and Linux. It checks your PC, picks the model that fits, shows what it will
+> download with the sizes, and **asks before anything downloads**.
 
-| System | Run |
-| --- | --- |
-| Windows 10 / 11 | double-click `install.bat` |
-| Linux (x64, ARM64) | `sh install.sh` |
-| macOS (Apple Silicon, Intel) | double-click `install.command` (first time: right-click → Open) |
+### What you need
 
-The installer:
+| | | |
+| :---: | --- | --- |
+| <img src="docs/icons/memory-stick.svg" width="22" height="22" alt=""> | **Memory** | 8 GB RAM works (small model) · **16 GB recommended** (better pages) |
+| <img src="docs/icons/cpu.svg" width="22" height="22" alt=""> | **Processor** | any ordinary CPU · a graphics card with 6 GB or more is used when there is one |
+| <img src="docs/icons/hard-drive.svg" width="22" height="22" alt=""> | **Disk** | free space for the model and the runner (the installer shows the exact sizes first) |
+| <img src="docs/icons/app-window.svg" width="22" height="22" alt=""> | **Browser** | Chrome, Edge, Chromium or Brave (Windows already has Edge) |
+| <img src="docs/icons/package.svg" width="22" height="22" alt=""> | **Python 3.10+** | not installed? the installer offers to install it for you |
+| <img src="docs/icons/wifi.svg" width="22" height="22" alt=""> | **Internet** | only for the first download; after that M42 UI works offline |
 
-1. finds Python 3.10+ (or offers to install it: winget, Homebrew, apt / dnf / pacman), makes its own environment
-   in `.venv` and installs the packages there (it asks first);
-2. checks this PC: RAM, free disk, graphics card;
-3. picks the model that fits: **Qwen3.5-2B** on an 8 GB PC, **Qwen3.5-4B** from 16 GB RAM or with a graphics card
-   of 6 GB or more (you can choose the other one);
-4. lists what it will download with the sizes and asks before anything downloads:
+### Three steps
+
+<table>
+<tr>
+<td width="64" align="center"><img src="docs/icons/step-1.svg" width="44" height="44" alt=""></td>
+<td>
+
+**Download M42 UI**
+
+Click the green **Code** button at the top of this page → **Download ZIP**, then unzip it. Or with git:
+
+```bash
+git clone https://github.com/M42TECHY/M42-UI.git
+```
+
+</td>
+</tr>
+<tr>
+<td width="64" align="center"><img src="docs/icons/step-2.svg" width="44" height="44" alt=""></td>
+<td>
+
+**Run the installer for your system**
+
+| | System | Do this |
+| :---: | --- | --- |
+| <img src="docs/icons/windows.svg" width="22" height="22" alt=""> | **Windows 10 / 11** | double-click `install.bat` |
+| <img src="docs/icons/apple.svg" width="22" height="22" alt=""> | **macOS** (Apple Silicon, Intel) | double-click `install.command` |
+| <img src="docs/icons/terminal.svg" width="22" height="22" alt=""> | **Linux** (x64, ARM64) | run `sh install.sh` in a terminal |
+
+</td>
+</tr>
+<tr>
+<td width="64" align="center"><img src="docs/icons/step-3.svg" width="44" height="44" alt=""></td>
+<td>
+
+**Say yes, and wait for it to finish**
+
+The installer sets up its own Python environment, checks your PC, picks the model, downloads it and opens
+M42 UI. Next time, start it with the launcher:
+
+| | Start M42 UI later |
+| :---: | --- |
+| <img src="docs/icons/windows.svg" width="22" height="22" alt=""> | `Start M42 UI.vbs` |
+| <img src="docs/icons/apple.svg" width="22" height="22" alt=""> | `Start M42 UI.command` |
+| <img src="docs/icons/terminal.svg" width="22" height="22" alt=""> | `Start M42 UI.sh` (also in the apps menu) |
+
+</td>
+</tr>
+</table>
+
+> [!NOTE]
+> **macOS, first time:** right-click `install.command` → **Open** (macOS asks once for files from the internet).
+
+### Which model does it pick?
+
+| Your PC | Model | |
+| --- | --- | --- |
+| 8 GB RAM | **Qwen3.5-2B** | smaller and lighter |
+| 16 GB RAM, or a graphics card with 6 GB+ | **Qwen3.5-4B** | better pages, reads pictures well |
+
+You can always choose the other one.
+
+<details>
+<summary><img src="docs/icons/settings-2.svg" width="18" height="18" alt=""> <b>What the installer does, step by step</b></summary>
+
+<br>
+
+1. Finds Python 3.10+ (or offers to install it: winget, Homebrew, apt / dnf / pacman), makes its own environment
+   in `.venv` and installs the packages there (it asks first).
+2. Checks this PC: RAM, free disk, graphics card.
+3. Picks the model that fits (see the table above).
+4. Lists what it will download with the sizes, and asks before anything downloads:
    - llama-server for this system (llama.cpp's release: Vulkan on Windows / Linux for any graphics card, Metal on
      a Mac, the CPU build as the fallback);
    - the model and its picture reader (Hugging Face, GGUF);
-   - speech: Whisper small (every language) and the Whisper Tanglish test model, and the voice detector;
-   each file is checked by its size and SHA-256, and a broken download resumes when you run it again;
-5. makes the launcher and starts M42 UI.
+   - speech: Whisper small (every language), the Whisper Tanglish test model and the voice detector.
 
-Start it later with `Start M42 UI.vbs` (Windows), `Start M42 UI.sh` (Linux, also in the apps menu) or
-`Start M42 UI.command` (macOS). If you start the app without the installer, it shows the same list in its window
-and downloads only when you press Download.
+   Each file is checked by its size and SHA-256, and a broken download resumes when you run it again.
+5. Makes the launcher and starts M42 UI.
 
-Options: `python m42/setup.py --yes` (no questions), `--tier 2b|4b`, `--no-speech`, `--no-start`;
-`python m42/firstrun.py plan` shows this PC and what it would download.
+If you start the app without the installer, it shows the same list in its window and downloads only when you
+press Download.
 
-Optional extras:
+</details>
+
+<details>
+<summary><img src="docs/icons/terminal.svg" width="18" height="18" alt=""> <b>Advanced options</b></summary>
+
+<br>
+
+| Command | What it does |
+| --- | --- |
+| `python m42/setup.py --yes` | install without questions |
+| `python m42/setup.py --tier 2b` or `--tier 4b` | choose the model yourself |
+| `python m42/setup.py --no-speech` | skip the speech models |
+| `python m42/setup.py --no-start` | install, but do not start the app |
+| `python m42/firstrun.py plan` | show this PC and what it would download |
+
+**Optional extras**
 - `models/UI-DETR-1/model.pth` (racineai/UI-DETR-1): finds the cards in a reference picture more reliably
   (needs `torch` and `rfdetr`).
 - The UIGEN-T2 examples: `python m42/uiexamples.py download` then `python m42/uiexamples.py build`.
-- Google Chrome, Chromium, Edge or Brave for the app window and the page checks (Windows has Edge already).
+
+</details>
 
 ## Folders
 
