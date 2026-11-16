@@ -1,4 +1,23 @@
+<div align="center">
+
 # M42 UI
+
+### Build websites with AI, on your own PC.
+
+Landing pages · 3D landing pages · Admin panels · Multi-page sites
+
+![No cloud](https://img.shields.io/badge/No_cloud-100%25_local-16a34a?style=for-the-badge)
+![No API key](https://img.shields.io/badge/No_API_key-free-2563eb?style=for-the-badge)
+![Runs on CPU](https://img.shields.io/badge/Runs_on-ordinary_CPU-9333ea?style=for-the-badge)
+![Windows · Linux · macOS](https://img.shields.io/badge/Windows_·_Linux_·_macOS-supported-f97316?style=for-the-badge)
+
+[**See what it builds**](#-what-it-builds) · [**Install**](#install-windows-linux-macos) · [**Support the project**](#-support-m42-ui)
+
+<img src="docs/screenshots/electronics-3d-landing.jpg" alt="A 3D landing page built by M42 UI" width="90%">
+
+</div>
+
+---
 
 A local AI app that designs and builds web pages and small multi-page sites on your own PC: no cloud model, no
 API key. You open a folder, describe the page (or attach a design picture), and M42 UI writes a working site into
@@ -6,6 +25,38 @@ that folder (HTML, Bootstrap, its own UI kit), checks it in a headless browser, 
 
 It runs one small model, **Qwen3.5-4B** (or **Qwen3.5-2B** on an 8 GB PC), through [llama.cpp](https://github.com/ggml-org/llama.cpp). It is made
 for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s).
+
+## ✨ Features
+
+| | |
+| --- | --- |
+| 🌐 **Landing pages** | product, shop, clinic, restaurant, event pages with real photos |
+| 🧊 **3D landing pages** | 3D hero scenes and motion, built with three.js |
+| 📊 **Admin panels** | dashboards, CRM, POS: tables, charts, kanban, forms that work |
+| 🖼️ **Design from a picture** | attach a design you like; its layout and colours are followed |
+| ✏️ **Edit by asking** | "make the header dark", "add a pricing section": only that part is rebuilt |
+| ✅ **Checked in a real browser** | links, contrast, phone width and JavaScript errors |
+| 🎤 **Voice input** | speak in Tamil, Tanglish or English |
+| 🔒 **Private** | everything stays on your PC |
+
+## 📸 What it builds
+
+Real pages built by M42 UI on a 16 GB PC, shown as they came out.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/electronics-3d-landing.jpg" alt="Electronics shop, 3D landing page"><br><b>🧊 Electronics shop</b> · 3D landing page</td>
+    <td width="50%"><img src="docs/screenshots/dental-3d-landing.jpg" alt="Dental clinic, 3D landing page"><br><b>🧊 Dental clinic</b> · 3D landing page</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/crm-admin-panel.jpg" alt="Real estate CRM admin panel"><br><b>📊 Real estate CRM</b> · admin panel</td>
+    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.jpg" alt="Electronics e-commerce landing page"><br><b>🛒 Electronics store</b> · e-commerce landing page</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/dental-landing.jpg" alt="Dental clinic landing page"><br><b>🦷 Dental clinic</b> · landing page</td>
+    <td width="50%"><img src="docs/screenshots/firecrackers-landing.jpg" alt="Firecrackers shop landing page"><br><b>🎆 Firecrackers shop</b> · landing page</td>
+  </tr>
+</table>
 
 ## How it works
 
@@ -74,6 +125,24 @@ M42-UI/
   .venv/        the installer's Python environment
   knowledge/    the UIGEN-T2 examples index (optional, not in the repository)
 ```
+
+## 💖 Support M42 UI
+
+M42 UI is free and runs on your own PC. If it saved you time or you like where it is going, a small donation
+keeps it growing: more page kinds, better 3D, faster on ordinary PCs.
+
+<div align="center">
+
+<a href="https://buymeacoffee.com/muthupandit"><img src="https://img.shields.io/badge/Buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
+<img src="https://img.shields.io/badge/UPI-muthupandi0297@oksbi-097939?style=for-the-badge&logo=googlepay&logoColor=white" alt="UPI: muthupandi0297@oksbi">
+
+**UPI (India):** `muthupandi0297@oksbi`, or scan with any UPI app:
+
+<img src="docs/upi-qr.jpg" alt="UPI QR code: muthupandi0297@oksbi" width="240">
+
+⭐ Not able to donate? A star on this repository helps others find it.
+
+</div>
 
 ## Licence
 
