@@ -1,0 +1,26 @@
+# model files, llama.cpp and the dataset index are downloaded, not committed
+models/
+llama.cpp/
+knowledge/
+# what the app writes on your PC
+m42/config.json
+m42/cache/
+m42/sessions/
+m42/memory/
+m42/logs/
+m42/projects/
+m42/plugins/
+projects/
+workspace/
+__pycache__/
+*.pyc
+# the installer's Python environment and the speech runner (downloaded)
+.venv/
+whisper.cpp/
+
+# test runs, logs and outputs (local only)
+benchmark/
+# Claude Code local settings
+.claude/
+# test scratch output
+m42/tests/_work/

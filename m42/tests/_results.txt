@@ -1,0 +1,35 @@
+PASS            0s  test_3d.py
+PASS           27s  test_appviews.py
+PASS           77s  test_carry.py
+PRINT-ONLY      7s  test_clone_check.py
+PASS            6s  test_designref.py
+PASS            3s  test_designref_app.py
+PASS            0s  test_editspeed.py
+PASS            0s  test_firstrun.py
+PASS           29s  test_frame.py
+PASS           24s  test_jiron.py
+PASS            0s  test_learn_design.py
+FAIL 1         13s  test_line_fix.py
+PASS            1s  test_long_refs.py
+PASS           12s  test_look.py
+PASS           17s  test_new_widgets.py
+PASS           34s  test_pagebuild.py
+PASS           17s  test_pagespec.py
+PASS            1s  test_photos.py
+PASS            1s  test_polish.py
+ERROR           0s  test_preview.py
+PASS            0s  test_privacy.py
+PRINT-ONLY      0s  test_projctx.py
+PASS           37s  test_refgrid.py
+PASS           46s  test_reuse.py
+PASS            0s  test_safety.py
+PASS           45s  test_site.py
+PASS           45s  test_siteedit.py
+PASS            1s  test_spec_fallback.py
+PASS            1s  test_themes.py
+PASS            1s  test_topbar.py
+PASS            1s  test_uiexamples.py
+PASS           13s  test_uikit.py
+PASS           31s  test_variants.py
+PASS            5s  test_webkit.py
+FAIL 2         21s  test_widgets.py

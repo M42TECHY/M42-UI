@@ -1,0 +1,5 @@
+# the install scripts keep their own line endings on every system
+*.sh text eol=lf
+*.command text eol=lf
+*.bat text eol=crlf
+*.vbs text eol=crlf

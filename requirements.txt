@@ -1,0 +1,16 @@
+# M42 UI: the server and the page checks
+pillow
+numpy
+opencv-python
+beautifulsoup4
+pypdf
+psutil
+# 🎤 speech: the voice detector and IndicConformer (sherpa-onnx), the Whisper Tanglish test model and, on a Mac,
+# Whisper small (transformers; torch is installed by the install script, the CPU build)
+sherpa-onnx
+transformers
+# the UIGEN-T2 examples index (optional: python m42/uiexamples.py build)
+pyarrow
+# UI-DETR-1, the card finder for reference pictures (optional, large)
+# torch
+# rfdetr

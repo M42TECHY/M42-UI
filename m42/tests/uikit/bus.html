@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoBus</title>
+<link rel="stylesheet" href="lib/bootstrap.min.css"><link rel="stylesheet" href="lib/bootstrap-icons.min.css">
+<link rel="stylesheet" href="lib/m42-ui.css">
+</head>
+<body class="m42-ui">
+<nav class="navbar navbar-expand-lg m42-nav"><div class="container">
+  <a class="navbar-brand" href="#"><i class="bi bi-bus-front"></i> GoBus</a>
+  <div class="ms-auto"><button class="m42-theme-toggle"></button></div></div></nav>
+<header class="m42-hero is-search"><div class="container">
+  <span class="m42-eyebrow"><i class="bi bi-lightning-charge"></i> 2,000+ routes in Tamil Nadu</span>
+  <h1>Your seat is <span class="m42-gradient-text">two taps away</span></h1>
+  <p class="lead">Compare operators, pick your exact seat and get your ticket on WhatsApp.</p>
+  <form class="m42-search">
+    <div><label class="form-label" for="from">From</label><input id="from" class="form-control" value="Madurai"></div>
+    <div><label class="form-label" for="to">To</label><input id="to" class="form-control" value="Chennai"></div>
+    <div><label class="form-label" for="date">Date</label><input id="date" type="date" class="form-control" value="2026-10-30"></div>
+    <div><button class="m42-btn w-100" type="button"><i class="bi bi-search"></i> Search buses</button></div>
+  </form>
+</div></header>
+<section id="results" class="m42-section"><div class="container"><div class="row g-4">
+  <div class="col-lg-8">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><h2 class="h4 m-0">12 buses found</h2>
+      <div class="m42-chips" data-single><button class="m42-chip-btn active">All</button><button class="m42-chip-btn">AC</button><button class="m42-chip-btn">Sleeper</button><button class="m42-chip-btn">Night</button></div></div>
+    <div class="m42-results">
+      <div class="m42-item"><div><h3>SRM Travels</h3><div class="m42-meta"><span><i class="bi bi-snow"></i> AC Sleeper</span><span><i class="bi bi-star-fill"></i> 4.6</span></div></div>
+        <div><b>21:30</b> → <b>05:15</b><div class="m42-meta">7h 45m · 23 seats left</div></div>
+        <div class="m42-price-tag">₹899<small>per seat</small><button class="m42-btn mt-2">Select seats</button></div></div>
+      <div class="m42-item"><div><h3>KPN Travels</h3><div class="m42-meta"><span><i class="bi bi-snow"></i> AC Seater</span><span><i class="bi bi-star-fill"></i> 4.3</span></div></div>
+        <div><b>22:10</b> → <b>06:00</b><div class="m42-meta">7h 50m · 9 seats left</div></div>
+        <div class="m42-price-tag">₹749<small>per seat</small><button class="m42-btn mt-2">Select seats</button></div></div>
+    </div>
+    <div class="m42-card mt-4"><h3 class="h5">Pick your seats</h3>
+      <div class="m42-pick-grid" id="seats" data-max="4" style="--m42-cols:5">
+        <button class="m42-pick" data-value="A1">A1</button><button class="m42-pick" data-value="A2">A2</button><span class="m42-pick gap"></span><button class="m42-pick taken">A3</button><button class="m42-pick" data-value="A4">A4</button>
+        <button class="m42-pick" data-value="B1">B1</button><button class="m42-pick" data-value="B2">B2</button><span class="m42-pick gap"></span><button class="m42-pick" data-value="B3">B3</button><button class="m42-pick taken">B4</button>
+      </div></div>
+  </div>
+  <div class="col-lg-4"><aside class="m42-summary"><h3 class="h5">Booking summary</h3>
+    <div class="m42-row"><span>Route</span><b>Madurai → Chennai</b></div><div class="m42-row"><span>Seats</span><b id="picked">—</b></div>
+    <div class="m42-total"><span>Total</span><span id="total">₹0</span></div><button class="m42-btn w-100 mt-3">Continue</button></aside></div>
+</div></div></section>
+<script src="lib/bootstrap.bundle.min.js"></script><script src="lib/m42-ui.js"></script>
+<script>
+document.getElementById('seats').addEventListener('m42:change', function (e) {
+  document.getElementById('picked').textContent = e.detail.selected.join(', ') || '—';
+  document.getElementById('total').textContent = '₹' + e.detail.selected.length * 899;
+});
+document.querySelector('[data-value="A1"]').click(); document.querySelector('[data-value="B2"]').click();
+</script>
+</body></html>

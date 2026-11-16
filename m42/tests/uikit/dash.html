@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" data-m42-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IoT Weather</title>
+<link rel="stylesheet" href="lib/bootstrap.min.css"><link rel="stylesheet" href="lib/bootstrap-icons.min.css">
+<link rel="stylesheet" href="lib/m42-ui.css">
+<style>:root { --bs-primary: #237ab8; --bs-primary-rgb: 35, 122, 184; }</style>
+</head>
+<body class="m42-ui"><div class="container pb-5">
+<div class="m42-head"><div><h1>IoT Weather Station</h1><p>Rooftop sensor · Madurai</p></div>
+  <div class="m42-head-side"><span class="m42-clock"></span><span class="m42-status" id="conn"></span><span class="m42-updated m42-muted"></span><button class="m42-theme-toggle"></button></div></div>
+<div class="m42-grid">
+  <div class="m42-stat" id="temp" data-label="Temperature" data-unit="°C" data-icon="bi-thermometer-half" data-warn="35" data-bad="40"></div>
+  <div class="m42-stat" id="rain" data-label="Rain" data-unit="%" data-icon="bi-cloud-rain"></div>
+  <div class="m42-gauge" id="hum" data-label="Humidity" data-unit="%" data-icon="bi-droplet"></div>
+  <div class="m42-stat" id="wind" data-label="Wind" data-unit="km/h" data-icon="bi-wind"></div>
+  <div class="m42-banner m42-span-2" id="pred"></div>
+  <div class="m42-chart m42-span-2" id="trend" data-label="Last readings" data-series="Temperature,Humidity"></div>
+</div></div>
+<script src="lib/m42-ui.js"></script>
+<script>
+function show(t, h, r, w) {
+  M42UI.set('temp', t); M42UI.gauge('hum', h); M42UI.set('rain', r); M42UI.set('wind', w); M42UI.push('trend', [t, h]);
+  var p = h > 80 && r > 60 ? {title: 'Rain likely', icon: 'bi-cloud-rain-heavy', tone: 'warn'} : h > 65 ? {title: 'Cloudy', icon: 'bi-clouds', tone: ''} : {title: 'Clear sky', icon: 'bi-sun', tone: 'good'};
+  p.text = 'Humidity ' + h + '%, rain ' + r + '%'; M42UI.banner('pred', p); M42UI.touch();
+}
+function tick() { show(M42UI.demo('t', 31, 3), M42UI.demo('h', 72, 12), M42UI.demo('r', 55, 25), M42UI.demo('w', 14, 6)); M42UI.status('conn', 'demo'); }
+for (var i = 0; i < 12; i++) tick();
+setInterval(tick, 3000);
+</script>
+</body></html>

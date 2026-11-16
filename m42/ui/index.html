@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M42 UI</title>
+<link rel="stylesheet" href="style.css">
+<!-- the window's / taskbar's icon: each size drawn on its own (one 256 px picture made small by the window was blurred) -->
+<link rel="icon" href="favicon.ico?v=4" sizes="16x16 20x20 24x24 32x32 40x40 48x48 64x64 128x128 256x256">
+<link rel="icon" href="favicon-16.png?v=4" type="image/png" sizes="16x16">
+<link rel="icon" href="favicon-32.png?v=4" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-48.png?v=4" type="image/png" sizes="48x48">
+<link rel="icon" href="favicon-256.png?v=4" type="image/png" sizes="256x256">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><img class="logo-img" src="logo.png?v=2" alt="" width="30" height="30"><span>M42 UI</span></div>
+    <nav class="sb-nav">
+      <button class="sb-item sb-new" id="newChat" title="A new chat in the open project folder (or choose a folder first)"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>New chat</span></button>
+      <button class="sb-item" id="newProject" title="Open a folder: M42 UI builds the web pages in it and changes them there"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg><span>Open folder</span></button>
+    </nav>
+
+    <div class="sb-scroll">
+      <div class="section-title">Projects</div>
+      <div class="project-list" id="projectList"></div>
+      <div class="section-title" id="chatsTitle" hidden>Chats</div>
+      <div class="sessions" id="sessions"></div>
+    </div>
+
+    <!-- the folder's files: kept for the app's own use, not shown (the user, 2026-11-12: "as Claude's side bar") -->
+    <div class="sb-files" hidden>
+      <div class="section-title files-title">
+        <span>Files <span class="hint" id="workspaceName"></span></span>
+        <button class="icon-btn" id="refreshTree" title="Refresh files">⟳</button>
+      </div>
+      <div class="tree" id="tree"></div>
+    </div>
+
+    <div class="sidebar-foot">
+      <button class="btn small ghost wide" id="openModels" hidden title="New models on Hugging Face that fit this PC, for chat and for code: download them to D: and use them">🧩 Models</button>
+      <button class="btn small ghost wide" id="openLearned" hidden title="What M42 learned while you used it: answers it looked up, code that worked, lessons from your corrections, tools it made">🧠 Learned</button>
+      <button class="sb-item" id="openSettings"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">Checking model…</span></div>
+      <div class="stats" id="stats"></div>
+      <button type="button" class="tb-icon" id="filesBtn" title="Files: open a file, select lines, ask for a change in them" aria-label="Files"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg><span>Files</span></button>
+    </header>
+
+    <section class="project-view" id="projectView" hidden>
+      <div class="pv-head">
+        <span class="pv-icon">📁</span>
+        <input id="pvName" class="pv-name" maxlength="60" title="Click to rename">
+        <div class="spacer"></div>
+        <button class="btn primary" id="pvNewChat">＋ New chat in this project</button>
+      </div>
+      <div class="pv-grid">
+        <div class="pv-card">
+          <h3>Folders</h3>
+          <div id="pvFolders"></div>
+          <div class="row wrap">
+            <button class="btn small" id="pvAddFolder">＋ Add existing folder…</button>
+            <button class="btn small" id="pvCreateFolder">＋ Create new folder</button>
+          </div>
+          <p class="hint">Add as many folders as the project needs, e.g. frontend + backend + firmware.
+            The agent can read, write and run commands only inside these folders.</p>
+        </div>
+        <div class="pv-card">
+          <h3>Instructions <span class="hint" id="pvSaved"></span></h3>
+          <textarea id="pvInstructions" rows="7" placeholder="Rules for every page in this project, e.g.&#10;• Brand colours: #6f4e37, #f5f5dc&#10;• Tamil and English text&#10;• No dark mode"></textarea>
+        </div>
+      </div>
+      <div class="pv-card" hidden>
+        <h3>📚 Paper library <span class="hint" id="pvLibCount"></span></h3>
+        <div id="pvLibrary"></div>
+        <div class="row wrap">
+          <button class="btn small" id="pvScan" title="Index PDFs you saved in the papers folder">🔄 Scan papers folder</button>
+          <button class="btn small" id="pvExportBib" title="Official BibTeX for every library paper with a DOI, added to references.bib">⬇ Export references.bib</button>
+        </div>
+        <p class="hint" id="pvLibHint"></p>
+      </div>
+      <div class="pv-card" hidden>
+        <h3>🧮 Literature matrix &amp; research gaps</h3>
+        <div class="row wrap">
+          <button class="btn small" id="mxBuild" title="Extract problem, method, dataset, metrics, results, limitations and future work from every library paper">🧮 Build matrix</button>
+          <button class="btn small" id="mxGaps" title="Find research gaps (each backed by specific papers) and candidate titles, with a novelty check">🔍 Find gaps &amp; titles</button>
+          <button class="btn small ghost" id="mxStop" hidden>⏹ Stop</button>
+        </div>
+        <div class="hint" id="mxStatus"></div>
+        <div class="papers-scroll" id="mxTable"></div>
+        <div id="mxGapsOut"></div>
+      </div>
+      <div class="pv-card" hidden>
+        <h3>📝 Document check <span class="hint">plagiarism check · humanize</span></h3>
+        <div class="row wrap">
+          <label class="btn small" title="PDF, Word (.docx) or text file">📎 Upload document…
+            <input type="file" id="docFile" accept=".pdf,.docx,.txt,.md" hidden></label>
+          <select id="docPick" title="Uploaded documents"></select>
+        </div>
+        <textarea id="docText" rows="3" placeholder="…or paste text here, then press a button below"></textarea>
+        <div class="row wrap">
+          <button class="btn small" id="docPlag" title="Every sentence against the web (exact-phrase search) and this project's paper library: copied, partly copied and paraphrased (bge-m3)">🔍 Plagiarism check</button>
+          <button class="btn small" id="docHuman" title="The local chat model rewrites each paragraph more clearly and naturally; bge-m3 checks the meaning, citations and numbers stayed the same">✍ Humanize</button>
+          <button class="btn small ghost" id="docStop" hidden>⏹ Stop</button>
+        </div>
+        <div class="hint" id="docStatus"></div>
+        <div id="docOut"></div>
+      </div>
+      <div class="pv-card">
+        <h3>Chats in this project</h3>
+        <div id="pvChats"></div>
+      </div>
+      <button class="btn small ghost danger-text" id="pvDelete">Delete project</button>
+      <span class="hint">(its chats are kept as general chats; your folders and files are never deleted)</span>
+    </section>
+
+    <div class="context-bar" id="contextBar"></div>
+
+    <div class="chat" id="chat">
+      <div class="empty" id="empty">
+        <img class="empty-logo-img" src="logo.png?v=2" alt="M42 UI" width="76" height="76">
+        <h1 id="emptyTitle">What should we build?</h1>
+        <p id="emptyHint">Open a folder (📂 Open folder), then describe the web page or site you want, or attach a design picture.</p>
+      </div>
+    </div>
+
+    <form class="composer" id="composer">
+      <div id="attachments" class="attachments" hidden></div>
+      <!-- one row (the user, 2026-11-12): + at the left, the words, the mic, then ONE round button: the send arrow,
+           which becomes the stop square while a request runs -->
+      <div class="composer-line">
+        <button type="button" class="cb-icon attach-btn" id="attachBtn" title="Add a design picture (PNG, JPEG, WebP), or drag it in" aria-label="Add a picture">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>
+        </button>
+        <input type="file" id="attachInput" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        <textarea id="input" rows="1" placeholder="Describe the page or the change you want…" aria-label="Message" title="Enter to send · Shift+Enter for a new line"></textarea>
+        <div class="mic-wave" id="micWave" hidden aria-label="Recording"><canvas></canvas><span class="mw-time">0:00</span></div>
+        <select id="modelSelect" class="model-select" title="Model used for the next message" hidden></select>
+        <button type="button" class="cb-send cb-stop" id="stopBtn" hidden title="Stop" aria-label="Stop">
+          <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor"/></svg>
+        </button>
+        <button type="submit" class="cb-send" id="sendBtn" title="Send (Enter)" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 18.5v-13M6.5 11 12 5.5 17.5 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="cb-icon mic-btn" id="micBtn" title="Speak: press, talk, press again (Esc cancels)" aria-label="Speak"></button>
+        <button type="button" class="mic-model" id="micModel" hidden title="Speech model" aria-label="Choose the speech model"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+    </form>
+  </main>
+
+  <aside class="preview-pane" id="previewPane" hidden aria-label="Page preview">
+    <div class="pp-resize" id="ppResize" role="separator" aria-orientation="vertical" aria-label="Drag to change the preview's width" title="Drag to change the width"></div>
+    <div class="pp-bar">
+      <span class="pp-dots"><i></i><i></i><i></i></span>
+      <span class="pp-address" id="ppAddress">index.html</span>
+      <button type="button" class="pp-icon" id="ppShot" title="Screenshot: the part on screen goes into the message box, write what to correct" aria-label="Screenshot for a correction"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <button type="button" class="pp-icon" id="ppReload" title="Reload" aria-label="Reload"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.6"/><path d="M20 4v7h-7"/></svg></button>
+      <a class="pp-icon" id="ppOpen" target="_blank" rel="noopener" title="Open in the browser" aria-label="Open in the browser"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+      <a class="pp-icon" id="ppDownload" title="Download the page (HTML + CSS + JS, works offline)" aria-label="Download"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/></svg></a>
+      <button type="button" class="pp-icon" id="ppClose" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="pp-stage"><iframe class="pp-frame" id="ppFrame" title="Page preview"
+      sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"></iframe></div>
+  </aside>
+
+  <!-- 📁 the folder's files beside the chat: a file opened, lines selected, a change asked for those lines only -->
+  <aside class="preview-pane files-pane" id="filesPane" hidden aria-label="Files">
+    <div class="pp-resize" id="fpResize" role="separator" aria-orientation="vertical" aria-label="Drag to change the files panel's width" title="Drag to change the width (double-click: the usual width)"></div>
+    <div class="pp-bar">
+      <button type="button" class="pp-icon" id="fpBack" hidden title="Back to the files" aria-label="Back"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <span class="fp-title" id="fpTitle">Files</span>
+      <button type="button" class="pp-icon" id="fpRefresh" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.6"/><path d="M20 4v7h-7"/></svg></button>
+      <button type="button" class="pp-icon" id="fpClose" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="fp-body" id="fpBody"></div>
+    <div class="fp-ask" id="fpAsk" hidden>
+      <div class="fp-ask-head"><span id="fpAskHead">Lines</span><button type="button" class="fp-ask-x" id="fpAskClose" title="Clear the selection" aria-label="Clear the selection">✕</button></div>
+      <div class="fp-ask-row">
+        <textarea id="fpAskInput" rows="1" placeholder="What should change in these lines?" aria-label="The change for the selected lines"></textarea>
+        <button type="button" class="cb-send" id="fpAskSend" title="Change these lines (Enter)" aria-label="Change these lines"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 18.5v-13M6.5 11 12 5.5 17.5 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" class="dialog-body" id="settingsForm">
+    <h2>Settings</h2>
+    <label hidden>Preset
+      <select id="preset">
+        <option value="">— choose —</option>
+        <option value="http://127.0.0.1:11434/v1">Ollama (127.0.0.1:11434)</option>
+        <option value="http://127.0.0.1:8080/v1">llama.cpp server (127.0.0.1:8080)</option>
+        <option value="http://127.0.0.1:1234/v1">LM Studio (127.0.0.1:1234)</option>
+      </select>
+    </label>
+    <label hidden>Server URL (OpenAI-compatible)<input name="base_url" required></label>
+    <label hidden>Model
+      <input name="model" list="modelList" required>
+      <datalist id="modelList"></datalist>
+    </label>
+    <div class="grid2">
+      <label>Temperature<input name="temperature" type="number" step="0.05" min="0" max="2"></label>
+      <label>Max output tokens<input name="max_tokens" type="number" min="128" step="128"></label>
+      <label>Context tokens<input name="ctx_tokens" type="number" min="2048" step="1024"></label>
+      <label>Max steps / request<input name="max_steps" type="number" min="1" max="100"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="native_tools"> Use native tool calling (turn off if the model ignores tools)</label>
+    <label class="check"><input type="checkbox" name="approve_edits"> Ask before creating / editing files</label>
+    <label class="check"><input type="checkbox" name="web_enabled"> Allow web search: M42 looks things up by itself when it needs to (docs, Stack Overflow, GitHub)</label>
+    <label hidden>API key (only for remote servers)<input name="api_key" type="password" autocomplete="off"></label>
+    <h3>🎤 Speech to text</h3>
+    <p class="hint">On this PC, no internet, CPU only. Each recording shows which model wrote it and how long it took.</p>
+    <label>Speech model<select name="speech_engine" id="speechEngine"></select></label>
+    <h3>Photos for the pages</h3>
+    <p class="hint">Free keys: pexels.com/api and pixabay.com/api/docs. With none, M42 UI uses free photos from StockSnap
+      (CC0) and Wikimedia Commons. Every photo is credited in the site's images/CREDITS.txt.</p>
+    <div class="grid2">
+      <label>Pexels API key<input name="pexels_key" type="password" autocomplete="off"></label>
+      <label>Pixabay API key<input name="pixabay_key" type="password" autocomplete="off"></label>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn ghost">Cancel</button>
+      <button value="save" class="btn primary" id="saveSettings">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="viewer">
+  <div class="viewer-head"><span id="viewerTitle"></span><span class="viewer-tools" id="viewerTools"></span><button class="btn small ghost" id="closeViewer">✕</button></div>
+  <div class="viewer-body" id="viewerBody"></div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

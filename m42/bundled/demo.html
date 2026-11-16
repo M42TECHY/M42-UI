@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Weather Monitor Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css">
+    <link rel="stylesheet" href="m42-ui.css">
+    <style>
+        :root { --bs-primary: #237ab8; --bs-primary-rgb: 35, 122, 184; --bs-link-color: #237ab8; }
+        .btn-primary { --bs-btn-bg: #237ab8; --bs-btn-border-color: #237ab8; --bs-btn-color: #ffffff; --bs-btn-hover-bg: #237ab8; --bs-btn-hover-color: #ffffff; --bs-btn-active-bg: #237ab8; }
+        .btn-outline-primary { --bs-btn-color: #237ab8; --bs-btn-border-color: #237ab8; --bs-btn-hover-bg: #237ab8; --bs-btn-hover-color: #ffffff; }
+        .m42-updated { color: #6c757d; }
+    </style>
+</head>
+<body class="m42-ui">
+    <nav class="navbar navbar-expand-lg m42-nav">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-thermometer-half"></i> Weather Monitor
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#section-id">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <header class="m42-hero">
+        <div class="container">
+            <span class="m42-eyebrow">Weather Monitoring</span>
+            <h1>Real-time Weather Data</h1>
+            <p class="lead">Monitor temperature, humidity, and rain percentage</p>
+            <div class="m42-actions">
+                <a class="m42-btn" href="#section-id">View Dashboard <i class="bi bi-arrow-right"></i></a>
+                <a class="m42-btn-ghost" href="#section-id">Help</a>
+            </div>
+        </div>
+    </header>
+
+    <section id="dashboard" class="m42-section">
+        <div class="container">
+            <div class="m42-section-head">
+                <span class="m42-eyebrow">Dashboard</span>
+                <h2>Current Weather Readings</h2>
+                <p>Live data from your IoT device</p>
+            </div>
+            <div class="row g-4">
+                <div class="m42-stat" id="temp" data-label="Temperature" data-unit="°C" data-icon="bi-thermometer-half" data-warn="35" data-bad="40"></div>
+                <div class="m42-gauge" id="hum" data-label="Humidity" data-unit="%" data-max="100" data-icon="bi-droplet"></div>
+                <div class="m42-stat" id="rain" data-label="Rain" data-unit="%" data-icon="bi-cloud-rain-heavy" data-warn="50" data-bad="70"></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="prediction" class="m42-section-alt">
+        <div class="container">
+            <div class="m42-section-head">
+                <span class="m42-eyebrow">Prediction</span>
+                <h2>Weather Prediction</h2>
+                <p>Based on current readings</p>
+            </div>
+            <div class="m42-banner m42-span-2" id="pred"></div>
+        </div>
+    </section>
+
+    <section id="status" class="m42-section">
+        <div class="container">
+            <div class="m42-section-head">
+                <span class="m42-eyebrow">Status</span>
+                <h2>Connection Status</h2>
+                <p>Device connectivity</p>
+            </div>
+            <div class="m42-head-side">
+                <span class="m42-clock"></span>
+                <span class="m42-status" id="conn"></span>
+                <span class="m42-updated"></span>
+                <button class="m42-theme-toggle"></button>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
+    <script src="m42-ui.js"></script>
+    <script>
+        const API_URL = 'http://192.168.x.x/data'; // Replace with your device's IP
+
+        function updateData() {
+            fetch(API_URL)
+                .then(response => response.json())
+                .then(data => {
+                    M42UI.set('temp', data.temperature);
+                    M42UI.gauge('hum', data.humidity);
+                    M42UI.set('rain', data.rain);
+                    M42UI.status('conn', 'online');
+                    M42UI.touch();
+
+                    const prediction = data.humidity > 80 && data.rain > 50 ? 'Rainy' : data.humidity > 60 ? 'Cloudy' : 'Sunny';
+                    M42UI.banner('pred', { title: prediction, text: `Humidity ${data.humidity}%, rain ${data.rain}%, ${prediction.toLowerCase()}`, icon: prediction === 'Rainy' ? 'bi-cloud-rain-heavy' : prediction === 'Cloudy' ? 'bi-cloud-sun' : 'bi-sun', tone: prediction === 'Rainy' ? 'warn' : prediction === 'Cloudy' ? 'info' : 'success' });
+                })
+                .catch(() => {
+                    M42UI.demo('temp', 28, 4);
+                    M42UI.status('conn', 'demo');
+                    M42UI.banner('pred', { title: 'Demo', text: 'Using demo readings', icon: 'bi-info-circle', tone: 'info' });
+                });
+
+            setTimeout(updateData, 5000);
+        }
+
+        updateData();
+    </script>
+</body>
+</html>
