@@ -128,8 +128,13 @@ M42-UI/
 
 ## <img src="docs/icons/heart.svg" width="30" height="30" alt="" align="top"> Support M42 UI
 
-M42 UI is free and runs on your own PC. If it saved you time or you like where it is going, a small donation
-keeps it growing: more page kinds, better 3D, faster on ordinary PCs.
+M42 UI is free, and I build it on my own time, on an ordinary PC like yours.
+
+If it helped you, saved you time, or you simply like what it does, a small donation means a lot. It tells me
+this work is useful to someone, and that keeps me going: more projects like this one, more kinds of pages,
+better 3D, and a faster app on everyday PCs. Every coffee turns into the next feature.
+
+Thank you for being part of it.
 
 <div align="center">
 
