@@ -13,7 +13,7 @@
 
 [**See what it builds**](#-what-it-builds) · [**Install**](#install-windows-linux-macos) · [**Support the project**](#-support-m42-ui)
 
-<img src="docs/screenshots/electronics-3d-landing.jpg" alt="A 3D landing page built by M42 UI" width="90%">
+<img src="docs/screenshots/electronics-3d-landing.webp" alt="A 3D landing page built by M42 UI" width="90%">
 
 </div>
 
@@ -45,16 +45,16 @@ Real pages built by M42 UI on a 16 GB PC, shown as they came out.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/electronics-3d-landing.jpg" alt="Electronics shop, 3D landing page"><br><img src="docs/icons/box.svg" width="18" height="18" alt=""> <b>Electronics shop</b> · 3D landing page</td>
-    <td width="50%"><img src="docs/screenshots/dental-3d-landing.jpg" alt="Dental clinic, 3D landing page"><br><img src="docs/icons/box.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · 3D landing page</td>
+    <td width="50%"><img src="docs/screenshots/electronics-3d-landing.webp" alt="Electronics shop, 3D landing page"><br><img src="docs/icons/box.svg" width="18" height="18" alt=""> <b>Electronics shop</b> · 3D landing page</td>
+    <td width="50%"><img src="docs/screenshots/dental-3d-landing.webp" alt="Dental clinic, 3D landing page"><br><img src="docs/icons/box.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · 3D landing page</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/crm-admin-panel.jpg" alt="Real estate CRM admin panel"><br><img src="docs/icons/layout-dashboard.svg" width="18" height="18" alt=""> <b>Real estate CRM</b> · admin panel</td>
-    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.jpg" alt="Electronics e-commerce landing page"><br><img src="docs/icons/shopping-cart.svg" width="18" height="18" alt=""> <b>Electronics store</b> · e-commerce landing page</td>
+    <td width="50%"><img src="docs/screenshots/crm-admin-panel.webp" alt="Real estate CRM admin panel"><br><img src="docs/icons/layout-dashboard.svg" width="18" height="18" alt=""> <b>Real estate CRM</b> · admin panel</td>
+    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.webp" alt="Electronics e-commerce landing page"><br><img src="docs/icons/shopping-cart.svg" width="18" height="18" alt=""> <b>Electronics store</b> · e-commerce landing page</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/dental-landing.jpg" alt="Dental clinic landing page"><br><img src="docs/icons/smile.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · landing page</td>
-    <td width="50%"><img src="docs/screenshots/firecrackers-landing.jpg" alt="Firecrackers shop landing page"><br><img src="docs/icons/party-popper.svg" width="18" height="18" alt=""> <b>Firecrackers shop</b> · landing page</td>
+    <td width="50%"><img src="docs/screenshots/dental-landing.webp" alt="Dental clinic landing page"><br><img src="docs/icons/smile.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · landing page</td>
+    <td width="50%"><img src="docs/screenshots/firecrackers-landing.webp" alt="Firecrackers shop landing page"><br><img src="docs/icons/party-popper.svg" width="18" height="18" alt=""> <b>Firecrackers shop</b> · landing page</td>
   </tr>
 </table>
 
