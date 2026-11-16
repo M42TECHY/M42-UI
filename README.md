@@ -62,9 +62,9 @@ Real pages built by M42 UI on a 16 GB PC, shown as they came out.
 
 **Watch M42 UI build pages, and follow what comes next**
 
-<a href="https://www.youtube.com/@M42TECH"><img src="https://img.shields.io/badge/YouTube-@M42TECH-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube: @M42TECH"></a>
-<a href="https://www.instagram.com/muthupandi20"><img src="https://img.shields.io/badge/Instagram-@muthupandi20-E4405F?style=for-the-badge&logo=instagram&logoColor=white" alt="Instagram: @muthupandi20"></a>
-<a href="https://m42tech.in"><img src="https://img.shields.io/badge/Website-m42tech.in-7C3AED?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website: m42tech.in"></a>
+<a href="https://www.youtube.com/@M42TECH"><img src="docs/social/youtube.svg" alt="YouTube: @M42TECH" width="260"></a>&nbsp;
+<a href="https://www.instagram.com/muthupandi20"><img src="docs/social/instagram.svg" alt="Instagram: @muthupandi20" width="260"></a>&nbsp;
+<a href="https://m42tech.in"><img src="docs/social/website.svg" alt="Website: m42tech.in" width="260"></a>
 
 </div>
 
