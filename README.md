@@ -148,7 +148,7 @@ pay by card, from any country
 
 **From India (UPI)**
 
-<img src="docs/upi-qr.jpg" alt="UPI QR code: muthupandi0297@oksbi" width="200">
+<img src="docs/upi-qr.webp" alt="UPI QR code: muthupandi0297@oksbi" width="200">
 
 `muthupandi0297@oksbi`
 
