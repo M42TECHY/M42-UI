@@ -133,12 +133,21 @@ keeps it growing: more page kinds, better 3D, faster on ordinary PCs.
 
 <div align="center">
 
-<a href="https://buymeacoffee.com/muthupandit"><img src="https://img.shields.io/badge/Buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
-<img src="https://img.shields.io/badge/UPI-muthupandi0297@oksbi-097939?style=for-the-badge&logo=googlepay&logoColor=white" alt="UPI: muthupandi0297@oksbi">
+**From anywhere in the world**
 
-**UPI (India):** `muthupandi0297@oksbi`, or scan with any UPI app:
+<a href="https://buymeacoffee.com/muthupandit"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" width="260"></a>
 
-<img src="docs/upi-qr.jpg" alt="UPI QR code: muthupandi0297@oksbi" width="240">
+pay by card, from any country
+
+<br>
+
+**From India (UPI)**
+
+<img src="docs/upi-qr.jpg" alt="UPI QR code: muthupandi0297@oksbi" width="200">
+
+`muthupandi0297@oksbi`
+
+<br>
 
 <img src="docs/icons/star.svg" width="18" height="18" alt=""> Not able to donate? A star on this repository helps others find it.
 
