@@ -285,6 +285,10 @@ M42-UI/
 
 ## Licence
 
+M42 UI is open source under the [GNU AGPL-3.0](LICENSE). The pages and sites you build with it are yours.
+
+**A commercial licence is also available.** Contact: [Instagram @muthupandi20](https://www.instagram.com/muthupandi20) or muthupandi0297@gmail.com
+
 See `THIRD_PARTY_NOTICES.md` for the bundled libraries and data and for the models and datasets you download.
 
 README icons: [Lucide](https://lucide.dev) (ISC licence, `docs/icons/LICENSE-lucide.txt`).
