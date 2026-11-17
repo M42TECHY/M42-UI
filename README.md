@@ -68,11 +68,19 @@ card the model runs on the card, so a build can be faster.
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/crm-admin-panel.webp" alt="Real estate CRM admin panel"><br><img src="docs/icons/layout-dashboard.svg" width="18" height="18" alt=""> <b>Real estate CRM</b> · admin panel</td>
-    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.webp" alt="Electronics e-commerce landing page"><br><img src="docs/icons/shopping-cart.svg" width="18" height="18" alt=""> <b>Electronics store</b> · e-commerce landing page</td>
+    <td width="50%"><img src="docs/screenshots/pos-textile-shop.webp" alt="Textile shop POS billing screen"><br><img src="docs/icons/package.svg" width="18" height="18" alt=""> <b>Textile shop POS</b> · billing admin panel</td>
   </tr>
   <tr>
+    <td width="50%"><img src="docs/screenshots/erp-it-solution.webp" alt="IT services ERP portal"><br><img src="docs/icons/layout-dashboard.svg" width="18" height="18" alt=""> <b>IT services ERP</b> · admin panel</td>
+    <td width="50%"><img src="docs/screenshots/school-admin-panel.webp" alt="School admin panel"><br><img src="docs/icons/app-window.svg" width="18" height="18" alt=""> <b>School portal</b> · admin panel</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/ecommerce-electronics.webp" alt="Electronics e-commerce landing page"><br><img src="docs/icons/shopping-cart.svg" width="18" height="18" alt=""> <b>Electronics store</b> · e-commerce landing page</td>
     <td width="50%"><img src="docs/screenshots/dental-landing.webp" alt="Dental clinic landing page"><br><img src="docs/icons/smile.svg" width="18" height="18" alt=""> <b>Dental clinic</b> · landing page</td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/screenshots/firecrackers-landing.webp" alt="Firecrackers shop landing page"><br><img src="docs/icons/party-popper.svg" width="18" height="18" alt=""> <b>Firecrackers shop</b> · landing page</td>
+    <td width="50%"></td>
   </tr>
 </table>
 
