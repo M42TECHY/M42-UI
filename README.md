@@ -34,7 +34,7 @@ for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s
 | :---: | --- | --- |
 | <img src="docs/icons/globe.svg" width="22" height="22" alt=""> | **Landing pages** | product, shop, clinic, restaurant, event, portfolio pages with real photos, and more |
 | <img src="docs/icons/box.svg" width="22" height="22" alt=""> | **3D landing pages** | 3D hero scenes, objects that move and assemble, story in beats (three.js), and more |
-| <img src="docs/icons/layout-dashboard.svg" width="22" height="22" alt=""> | **Admin panels** | dashboards, CRM, POS, school, clinic and stock apps: tables, charts, kanban, forms that work, and more |
+| <img src="docs/icons/layout-dashboard.svg" width="22" height="22" alt=""> | **Admin panels** | dashboards, CRM, POS, SaaS admin panels and other common business apps: tables, charts, kanban, forms that work, and more |
 | <img src="docs/icons/image.svg" width="22" height="22" alt=""> | **Design from a picture** | attach any design you like (a page, a dashboard, an app screen); its layout and colours are followed |
 | <img src="docs/icons/wand-sparkles.svg" width="22" height="22" alt=""> | **Edit by asking** | "make the header dark", "add a pricing section": only that part is rebuilt |
 | <img src="docs/icons/shield-check.svg" width="22" height="22" alt=""> | **Checked in a real browser** | links, contrast, phone width and JavaScript errors |
