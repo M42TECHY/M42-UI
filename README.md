@@ -32,14 +32,28 @@ for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s
 
 | | | |
 | :---: | --- | --- |
-| <img src="docs/icons/globe.svg" width="22" height="22" alt=""> | **Landing pages** | product, shop, clinic, restaurant, event pages with real photos |
-| <img src="docs/icons/box.svg" width="22" height="22" alt=""> | **3D landing pages** | 3D hero scenes and motion, built with three.js |
-| <img src="docs/icons/layout-dashboard.svg" width="22" height="22" alt=""> | **Admin panels** | dashboards, CRM, POS: tables, charts, kanban, forms that work |
-| <img src="docs/icons/image.svg" width="22" height="22" alt=""> | **Design from a picture** | attach a design you like; its layout and colours are followed |
+| <img src="docs/icons/globe.svg" width="22" height="22" alt=""> | **Landing pages** | product, shop, clinic, restaurant, event, portfolio pages with real photos, and more |
+| <img src="docs/icons/box.svg" width="22" height="22" alt=""> | **3D landing pages** | 3D hero scenes, objects that move and assemble, story in beats (three.js), and more |
+| <img src="docs/icons/layout-dashboard.svg" width="22" height="22" alt=""> | **Admin panels** | dashboards, CRM, POS, school, clinic and stock apps: tables, charts, kanban, forms that work, and more |
+| <img src="docs/icons/image.svg" width="22" height="22" alt=""> | **Design from a picture** | attach any design you like (a page, a dashboard, an app screen); its layout and colours are followed |
 | <img src="docs/icons/wand-sparkles.svg" width="22" height="22" alt=""> | **Edit by asking** | "make the header dark", "add a pricing section": only that part is rebuilt |
 | <img src="docs/icons/shield-check.svg" width="22" height="22" alt=""> | **Checked in a real browser** | links, contrast, phone width and JavaScript errors |
-| <img src="docs/icons/mic.svg" width="22" height="22" alt=""> | **Voice input** | speak in Tamil, Tanglish or English |
+| <img src="docs/icons/mic.svg" width="22" height="22" alt=""> | **Voice input** | **Tamil**: AI4Bharat IndicConformer Tamil (Tamil and Tanglish, typed live in Tamil script) · **English and 98 more languages**: Whisper small ([full list](#voice-languages)) |
 | <img src="docs/icons/lock.svg" width="22" height="22" alt=""> | **Private** | everything stays on your PC |
+| <img src="docs/icons/sparkles.svg" width="22" height="22" alt=""> | **And more** | blogs, shops, booking pages, multi-page sites, app screens: describe it, and M42 UI builds it |
+
+<a id="voice-languages"></a>
+<details>
+<summary><img src="docs/icons/mic.svg" width="18" height="18" alt=""> <b>Voice languages: Tamil with IndicConformer, 99 languages with Whisper small</b></summary>
+
+<br>
+
+- **Tamil:** AI4Bharat **IndicConformer Tamil**: very fast, writes Tamil script, understands Tanglish.
+- **Whisper small (99 languages, detected on its own):** English, Chinese, German, Spanish, Russian, Korean, French, Japanese, Portuguese, Turkish, Polish, Catalan, Dutch, Arabic, Swedish, Italian, Indonesian, Hindi, Finnish, Vietnamese, Hebrew, Ukrainian, Greek, Malay, Czech, Romanian, Danish, Hungarian, Tamil, Norwegian, Thai, Urdu, Croatian, Bulgarian, Lithuanian, Latin, Maori, Malayalam, Welsh, Slovak, Telugu, Persian, Latvian, Bengali, Serbian, Azerbaijani, Slovenian, Kannada, Estonian, Macedonian, Breton, Basque, Icelandic, Armenian, Nepali, Mongolian, Bosnian, Kazakh, Albanian, Swahili, Galician, Marathi, Punjabi, Sinhala, Khmer, Shona, Yoruba, Somali, Afrikaans, Occitan, Georgian, Belarusian, Tajik, Sindhi, Gujarati, Amharic, Yiddish, Lao, Uzbek, Faroese, Haitian Creole, Pashto, Turkmen, Nynorsk, Maltese, Sanskrit, Luxembourgish, Myanmar, Tibetan, Tagalog, Malagasy, Assamese, Tatar, Hawaiian, Lingala, Hausa, Bashkir, Javanese, Sundanese.
+
+Whisper small is best in English; in languages with less training data it makes more mistakes.
+
+</details>
 
 ## <img src="docs/icons/images.svg" width="30" height="30" alt="" align="top"> What it builds
 
