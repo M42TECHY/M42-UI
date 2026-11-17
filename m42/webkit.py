@@ -1171,6 +1171,28 @@ LOCAL_REF_RX = re.compile(r'[ \t]*<script\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>\
                           r'|[ \t]*<link\b[^>]*\bhref=["\']([^"\']+)["\'][^>]*>[ \t]*\n?', re.I)
 
 
+CDN_RX = re.compile(r"^(?:https?:)?//(?:cdn\.jsdelivr\.net/npm/|unpkg\.com/|cdnjs\.cloudflare\.com/ajax/libs/)"
+                    r"(@[\w.-]+/[\w.-]+|[\w.-]+)[@/]", re.I)
+
+
+def _local_copy(url, root):
+    """The folder's own copy of the library a CDN link loads ("lib/chart.js-4.6.1-chart.umd.min.js", as link_libraries
+    names it), of the same kind (.js / .css), or ""."""
+    m = CDN_RX.match(url or "")
+    if not m or not root:
+        return ""
+    pkg = m.group(1).lower()
+    stem = pkg.replace("/", "__").lstrip("@")
+    ext = ".css" if url.lower().split("?")[0].endswith(".css") else ".js"
+    lib = Path(root) / "lib"
+    try:
+        hits = sorted(f.name for f in lib.iterdir() if f.is_file() and f.name.lower().startswith(stem + "-")
+                      and f.name.lower().endswith(ext) and re.match(re.escape(stem) + r"-\d", f.name.lower()))
+    except OSError:
+        return ""
+    return f"lib/{hits[-1]}" if hits else ""
+
+
 def mend_refs(html, root):
     """🩹 A page's own file links made true, for any page (no model): a <script src> / <link href> to a file of the
     folder that does not exist is taken out (a rules edit linked "m42-cart.js" four times, a file nobody wrote: four
@@ -1192,12 +1214,19 @@ def mend_refs(html, root):
         if m.group(2) is not None and not re.search(r'rel=["\']?stylesheet', tag, re.I):
             return tag  # (a link that is no stylesheet: an icon, a preload: not ours to judge)
         path = url.split("?")[0].split("#")[0]
+        own = _local_copy(path, root) if re.match(r"^(?:https?:)?//", path, re.I) else ""
+        if own:  # (a CDN link to a library the folder has: its own copy, so the page works offline and loads it once:
+            # a rules edit linked Chart.js 4.4.1 from jsDelivr beside lib/chart.js-4.6.1, 2026-11-17)
+            out.append(f"{path.rsplit('/', 1)[-1]} from the web (the folder's own {own})")
+            tag = tag.replace(url, own)
+            path = url = own
         if not path or re.match(r"^(?:[a-z]+:|//|data:|#)", path, re.I):
             key = url
         else:
             rel = path.lstrip("./").lstrip("/")
             there = Path(root) / rel if root else None
-            kit = rel.startswith("lib/") and rel[4:] in KIT_FILES
+            kit = rel.rsplit("/", 1)[-1] in KIT_FILES  # (the kit by its own name: "lib/m42-ui.css" in the folder, "m42-ui.css"
+            # in a page not yet saved: it goes to lib/ when the page is; taken for missing, it was taken out, 2026-11-17)
             if not kit and not (there and there.is_file()) and root:
                 out.append(f"{rel} (no such file)")
                 return ""

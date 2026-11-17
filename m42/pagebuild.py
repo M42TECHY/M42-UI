@@ -1439,6 +1439,18 @@ def _no_tags(v):
 SHARES_ITEMS = ("invoice", "order_tracker", "summary", "picks")
 
 
+def whole_name(name):
+    """A name cut at its length limit made whole (no model): an open bracket with nothing closing it and what follows,
+    a dangling joiner or mark at its end go ("NexusHome IoT Hub Pro v2.4.1 (" was the brand and the tab's title,
+    2026-11-17)."""
+    t = " ".join(str(name or "").split())
+    for o, c in ("()", "[]", "{}"):
+        while t.count(o) > t.count(c):
+            t = t[:t.rfind(o)].rstrip()
+    t = re.sub(r"[\s,;:&+/|·•\-–—(]+$", "", t)
+    return t or " ".join(str(name or "").split())
+
+
 def clean(plan, spec):
     """The model's plan made safe: known parts only, the spec's hero kind, at least the spec's sections. A part
     that doesn't fit the section's content is changed: first what the content itself is (numbers -> stats, input
@@ -1446,6 +1458,8 @@ def clean(plan, spec):
     has no big empty picture, so it becomes cards."""
     plan = _no_tags(plan if isinstance(plan, dict) else {})
     plan = privacy.scrub_obj(plan)  # no personal details (phone, e-mail, address, Aadhaar, PAN): example ones
+    if isinstance(plan.get("brand"), dict) and plan["brand"].get("name"):
+        plan["brand"] = dict(plan["brand"], name=whole_name(plan["brand"]["name"]))
     wanted = [x.get("part") for x in (spec or {}).get("sections") or [] if isinstance(x, dict)]
     app_page = (spec or {}).get("hero") in ("compact", "none")
     secs = []

@@ -1432,6 +1432,37 @@ code the user pasted? styles = each one, in the request's own words; [] when it 
                 if str(x).strip() and not re.search(r"[{};]", str(x)) and set(re.findall(r"[a-z]{4,}", str(x).lower())) & words_][:4]
 
     @staticmethod
+    def _one_reading(asks):
+        """A reading of the asks that tells nothing apart (3+ asks, all in the frame, all "inside", or all in one place):
+        the IoT run put its seven asks all in the frame, and its connection status was never drawn (2026-11-17)."""
+        body = [str(a.get("place") or "") for a in asks or [] if isinstance(a, dict)]
+        if len(body) < 3:
+            return False
+        return len(set(body)) == 1 or all(p == "FRAME" for p in body) or all(p.startswith("inside ") for p in body)
+
+    def _asks_one_by_one(self, system, items, places, parts, context, emit, model=None):
+        """Each ask read alone, in its own small call (one thing, one place): what the one big call could not tell
+        apart. [{"item", "place", "part", "name", "what"}]."""
+        out = []
+        for it in items:
+            if self.stop_event.is_set():
+                break
+            try:
+                raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": context + chr(10) + "What the user asked for (this one thing):" + chr(10)
+                                                + f"- {it['name']}: {it.get('shows') or ''}"}],
+                    {"type": "object", "properties": {
+                        "place": {"type": "string", "enum": places}, "part": {"type": "string", "enum": [""] + parts},
+                        "name": {"type": "string", "maxLength": 40}, "what": {"type": "string", "maxLength": 160}},
+                     "required": ["place", "part", "name", "what"]}, max_tokens=120, api_key=self.config.get("api_key") or None)
+                self._emit_stats(emit, "your asks", timings)
+                out.append(dict(raw, item=it["name"]))
+            except (llm.LLMError, ValueError, OSError):
+                continue
+        return out
+
+    @staticmethod
     def _plain_name(name):
         """A section's name without the listing's own format echoed back by the 4B ("menu [cards] Glassmorphism
         cards": the page then said "Menu Highlights" was missing, 2026-11-17)."""
@@ -1565,6 +1596,14 @@ blocks of the page that class is for: their numbers from the map (each line one 
             self._emit_stats(emit, "your asks", timings)
         except (llm.LLMError, ValueError, OSError):
             return rows
+        if self._one_reading(raw.get("asks")):
+            emit({"type": "note", "message": "🧩 Your asks all came back in one place: reading each one alone"})
+            again = self._asks_one_by_one(
+                self.LANDING_ASKS_PROMPT, items, places, parts,
+                f"The request: {asked[:700]}" + chr(10) + "The page's sections:" + chr(10)
+                + chr(10).join(f"- {r['name']} [{r['part']}]: {r.get('what') or ''}" for r in rows), emit, model)
+            if again and not self._one_reading(again):
+                raw = dict(raw, asks=[dict(a, role=ROLE_OF_PART.get(a.get("part"), "")) for a in again])
         by = {key_(r["name"]): r for r in rows}
         base_, mdl_, k_ = llamacpp.base_url_for(self.config), model or self.active_model(), self.config.get("api_key") or None
         items_by = {it["name"]: it for it in items}
@@ -1945,6 +1984,14 @@ requests need none: answer {"extras": []}."""
                     "required": ["asks", "main", "libraries"]},
                 max_tokens=900, api_key=self.config.get("api_key") or None)
             self._emit_stats(emit, "your asks", timings)
+            if self._one_reading(raw.get("asks")):
+                emit({"type": "note", "message": "🧩 Your asks all came back in one place: reading each one alone"})
+                again = self._asks_one_by_one(
+                    self.ASKED_PROMPT, items, places, ask_parts,
+                    f"The request: {asked[:700]}" + chr(10) + f"The screen's sections ({sk['label']}, for {sk['users']}):" + chr(10) + listing,
+                    emit, model)
+                if again and not self._one_reading(again):
+                    raw = dict(raw, asks=again)
             key_ = lambda t: re.sub(r"[^a-z0-9]+", "", str(t or "").lower())  # (names compared letters only: "Fee dues" = "fee-dues")
             by_name = {key_(s_["name"]): s_ for s_ in secs}
             seen_asks = []
@@ -2738,7 +2785,7 @@ per part the message names], "why": one short sentence}."""
         if self.workspace.roots:
             new, dropped = webkit.mend_refs(new, self.workspace.roots[0][1])
             if dropped:
-                done.append("links to files the folder does not have taken out: " + ", ".join(dropped[:4]))
+                done.append("file links mended (a file the folder does not have, a library from the web it has itself): " + ", ".join(dropped[:4]))
                 gone = {d.split(" (")[0].rsplit("/", 1)[-1] for d in dropped}
                 probs = [p for p in probs if not (re.match(r"\s*-?\s*Failed to load", p) and any(g in p for g in gone))]
                 self._page_problems = probs
@@ -4685,7 +4732,7 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         webkit.sync_files(root, {n for n in webkit.KIT_FILES if f"lib/{n}" in local}, "")
         local, dropped = webkit.mend_refs(local, root)
         if dropped:
-            emit({"type": "note", "message": "🩹 Links to files the folder does not have, taken out: " + ", ".join(dropped[:4])})
+            emit({"type": "note", "message": "🩹 The page's file links mended (a file it does not have, a library from the web it has itself): " + ", ".join(dropped[:4])})
         try:
             res = self.workspace.write_file("index.html", local)
         except (ToolError, OSError) as e:

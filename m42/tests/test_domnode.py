@@ -268,5 +268,16 @@ check("column: the layout says the same order", pos_["app_layout"][0][0]["parts"
 check("app asks: each ask kept with its section, the frame's too",
       next(s for s in pos_["sections"] if s["part"] == "invoice").get("asks") == ["Cart"] and pos_.get("frame_items") == ["Footer"])
 
+# 🩹 a CDN link to a library the folder has: its own copy; a cut name made whole
+(root_ / "lib").mkdir(exist_ok=True)
+(root_ / "lib" / "chart.js-4.6.1-chart.umd.min.js").write_text("x")
+cdn, gone2 = webkit.mend_refs('<html><body><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>'
+                              '<script src="lib/m42-ui.js"></script><script src="m42-ui.js"></script></body></html>', root_)
+check("refs: the web's Chart.js -> the folder's own copy", 'src="lib/chart.js-4.6.1-chart.umd.min.js"' in cdn and "jsdelivr" not in cdn, cdn)
+check("refs: the kit by its own name is never taken for missing", "m42-ui.js (no such file)" not in " ".join(gone2), gone2)
+check("name: a cut brand made whole", pagebuild.whole_name("NexusHome IoT Hub Pro v2.4.1 (") == "NexusHome IoT Hub Pro v2.4.1")
+check("one reading: all asks in the frame", agent.Agent._one_reading([{"place": "FRAME"}] * 4)
+      and not agent.Agent._one_reading([{"place": "FRAME"}, {"place": "Devices"}, {"place": "NEW section"}]))
+
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)
