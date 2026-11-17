@@ -5,8 +5,8 @@ opencv-python
 beautifulsoup4
 pypdf
 psutil
-# 🎤 speech: the voice detector and IndicConformer (sherpa-onnx), the Whisper Tanglish test model and, on a Mac,
-# Whisper small (transformers; torch is installed by the install script, the CPU build)
+# 🎤 speech: the voice detector and IndicConformer Tamil (sherpa-onnx) and, on a Mac, Whisper small (transformers;
+# torch is installed by the install script, the CPU build)
 sherpa-onnx
 transformers
 # the UIGEN-T2 examples index (optional: python m42/uiexamples.py build)

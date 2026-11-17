@@ -31,8 +31,9 @@ core = firstrun.plan("4b", speech=False)
 check("a new PC: the model, the picture reader and llama-server are missing",
       [i["group"] for i in core].count("model") == 2 and [i["kind"] for i in core].count("llama") >= 1, [i["label"] for i in core])
 speech = [i["label"] for i in firstrun.plan("4b") if i["group"] == "speech"]
-check("and the speech models: Whisper small, the Tanglish test model, the voice detector",
-      any("small" in s for s in speech) and any("tanglish" in s for s in speech) and any("silero" in s for s in speech), speech)
+check("and the speech models: Whisper small (English), IndicConformer Tamil (its model and tokens), the voice detector",
+      any("small" in s for s in speech) and any("indicconformer/ta" in s for s in speech) and any("indicconformer/tokens" in s for s in speech)
+      and any("silero" in s for s in speech), speech)
 # the model that fits the PC (the user, 2026-11-15: "8 GB: the 2B; 16 GB: the 4B")
 check("8 GB RAM: the 2B", firstrun.choose_tier({"ram_gb": 7.8, "gpus": []})[0] == "2b")
 check("16 GB RAM (13.9 seen with the iGPU's share): the 4B", firstrun.choose_tier({"ram_gb": 13.9, "gpus": []})[0] == "4b")

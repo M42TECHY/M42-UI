@@ -309,6 +309,35 @@
     ownGroups(scope).forEach(function (x) { if (a.indexOf(x) < 0) a.push(x); });
     return a.filter(function (x) { return !x.closest(".m42-enter, .m42-entered"); });
   }
+  // every popup (.modal) moved to <body> before anything opens it: inside a section that moves (its reveal leaves a
+  // transform on it) the popup was drawn UNDER Bootstrap's dark backdrop, and its form could not be typed in ("Add
+  // Staff: the overlay blocks the inputs", 2026-11-17); its button still finds it by its id
+  function modalsToBody() {
+    [].slice.call(document.querySelectorAll(".modal")).forEach(function (m) {
+      if (m.parentElement !== document.body) document.body.appendChild(m);
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", modalsToBody); else modalsToBody();
+  // charts drawn by Chart.js when the user named it (widgets._chartjs): the page's own colours, its font
+  function chartjs() {
+    if (!window.Chart) return;
+    var css = getComputedStyle(document.documentElement), v = function (n, d) { return (css.getPropertyValue(n) || "").trim() || d; };
+    var tones = [v("--m42-accent", "#4f46e5"), v("--m42-accent-2", "#06b6d4"), v("--m42-accent-3", "#f59e0b"), "#10b981", "#ef4444", "#8b5cf6"];
+    window.Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    window.Chart.defaults.color = v("--m42-muted", "#64748b");
+    [].slice.call(document.querySelectorAll("canvas[data-m42-chartjs]")).forEach(function (cv) {
+      var c; try { c = JSON.parse(cv.getAttribute("data-m42-chartjs")); } catch (x) { return; }
+      var ring = c.type === "doughnut";
+      new window.Chart(cv, { type: c.type, data: { labels: c.labels, datasets: c.series.map(function (s, k) {
+        return { label: s.name, data: s.values, borderColor: ring ? "#fff" : tones[k % 6], tension: .35, fill: false,
+                 backgroundColor: ring ? tones.slice(0, s.values.length) : tones[k % 6] + (c.type === "bar" ? "" : "33"),
+                 borderRadius: c.type === "bar" ? 6 : 0, pointRadius: 3 }; }) },
+        options: { responsive: true, maintainAspectRatio: false, animation: window.M42_STILL ? false : undefined,
+                   plugins: { legend: { display: ring || c.series.length > 1, position: "bottom" } },
+                   scales: ring ? {} : { y: { beginAtZero: true, grid: { color: "rgba(100,116,139,.15)" } }, x: { grid: { display: false } } } } });
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", chartjs); else chartjs();
   // (M42's own check of an edit counts what moves in a part: editcheck.py)
   window.M42Reveal = { items: revealItems, hoverItems: function (scope) { return [].slice.call(scope.querySelectorAll(HOVER)); } };
 
@@ -407,6 +436,17 @@
     var MOv = window.M42_MOTION || {};
     var ownReveal = !!document.querySelector("[data-m42-sec-reveal]:not([data-m42-sec-reveal='none'])");
     if (!("IntersectionObserver" in window) || reduce || (MOv.level === "none" && !(ownReveal && window.anime))) { counters.forEach(counter); }
+    else if (window.AOS && window.AOS.init) {  // the user named AOS: it reveals the parts, staggered in each group
+      items.forEach(function (x) {
+        if (x.hasAttribute("data-aos")) return;
+        var sib = x.parentElement ? [].indexOf.call(x.parentElement.children, x) : 0;
+        x.setAttribute("data-aos", "fade-up");
+        x.setAttribute("data-aos-delay", String(Math.min(sib, 6) * 90));
+      });
+      window.AOS.init({ once: true, duration: 700, offset: 40 });
+      var ioC = new IntersectionObserver(function (es) { es.forEach(function (en) { if (en.isIntersecting) { counter(en.target); ioC.unobserve(en.target); } }); });
+      counters.forEach(function (x) { ioC.observe(x); });
+    }
     else if (window.anime) { animeReveal(items, counters, MOv); }
     else {  // (not "return": the ripple, tilt and forms below are for everyone)
     items.forEach(function (x) { x.classList.add("m42-reveal"); });

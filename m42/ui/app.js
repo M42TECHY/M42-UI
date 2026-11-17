@@ -176,6 +176,25 @@ function closePreview() {
 }
 (function previewPaneTools() {
   $("ppReload").onclick = () => { if (lastPreview) $("ppFrame").src = lastPreview.url + "?r=" + Date.now(); };
+  // 🎯 pick a part: the page outlines the block under the mouse; a click on it puts it in the message box, and the
+  // words written then are a change to that block only (the user, 2026-11-17: click-to-edit)
+  const pickBtn = $("ppPick");
+  const pickOff = () => { pickBtn.classList.remove("on"); try { $("ppFrame").contentWindow.postMessage("m42:pick-off", "*"); } catch { /* */ } };
+  pickBtn.onclick = () => {
+    if (!lastPreview) return;
+    if (pickBtn.classList.contains("on")) { pickOff(); return; }
+    pickBtn.classList.add("on");
+    try { $("ppFrame").contentWindow.postMessage("m42:pick-on", "*"); } catch { /* */ }
+  };
+  $("ppFrame").addEventListener("load", () => pickBtn.classList.remove("on"));
+  window.addEventListener("message", (e) => {
+    if (e.source !== $("ppFrame").contentWindow || !e.data || !("m42pick" in e.data)) return;
+    pickBtn.classList.remove("on");
+    if (!e.data.m42pick) return;
+    pendingPick = e.data.m42pick;
+    renderAttachments();
+    $("input").focus();
+  });
   $("ppClose").onclick = closePreview;
   // 📷 the part of the page on screen, as a picture in the message box: the user writes the correction with it
   $("ppShot").onclick = async () => {
@@ -2143,7 +2162,7 @@ const MIC_ICON = '<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="t
 /* Live typing (as in Claude: the words come into the box while you speak; the user, 2026-11-13): the voice is cut
  * into phrases at short pauses; each finished phrase is written for good, the phrase still being spoken is written
  * now and then as a grey draft that its final words replace. One request to the speech model at a time. */
-const SPEECH_PAUSE = 0.55, SPEECH_MAX = 20, SPEECH_DRAFT_EVERY = 700;  // a pause (s), the longest phrase (s), drafts at most this often (ms)
+const SPEECH_PAUSE = 0.8, SPEECH_MAX = 20, SPEECH_DRAFT_EVERY = 700;  // a pause (s), the longest phrase (s), drafts at most this often (ms)
 
 function micShow(m) {
   const input = $("input"), words = [m.done, m.draft].filter(Boolean).join(" ");
@@ -2154,10 +2173,11 @@ function micShow(m) {
   input.scrollTop = input.scrollHeight;
 }
 
-async function micWords(m, chunks) {
+async function micWords(m, chunks, final) {
   const audio = await readAsDataUrl(wavFrom(chunks, m.rate));
   const t = Date.now();
-  const res = await post("/api/speech", { audio });  // Whisper / IndicConformer on this PC
+  // the words already said go with it (Whisper's context), and a finished phrase is read more carefully than a draft
+  const res = await post("/api/speech", { audio, prompt: (m.done || "").slice(-200), final: !!final });  // Whisper / IndicConformer on this PC
   // the next draft no sooner than one takes (IndicConformer ~0.2 s, Whisper Tanglish ~0.6 s, Whisper small ~3.5 s): the
   // last few averaged, so one slow first run (a model warming up) does not hold the drafts back
   m.costs = [...(m.costs || []), Date.now() - t].slice(-3);
@@ -2174,7 +2194,7 @@ async function micPump(m) {
   try {
     while (m.finals.length || (m.wantDraft && !m.closed)) {
       if (m.finals.length) {
-        const text = await micWords(m, m.finals.shift());
+        const text = await micWords(m, m.finals.shift(), true);
         if (text) m.done = [m.done, text].filter(Boolean).join(" ");
         micShow(m);
       } else {
@@ -2374,7 +2394,7 @@ async function checkStatus() {
         const n = document.createElement("div");
         n.className = "m42-setup-note m42-setup-ask";
         n.innerHTML = `<b>M42 UI needs to download ${su.gb} GB for this PC</b><span>` +
-          [part("model", `AI model (${su.tier_label})`), part("runner", "its runner (llama.cpp)"), part("speech", "speech models (Whisper small + Tanglish test)")]
+          [part("model", `AI model (${su.tier_label})`), part("runner", "its runner (llama.cpp)"), part("speech", "speech models (IndicConformer Tamil + Whisper small)")]
             .filter(Boolean).join(" · ") + ". From Hugging Face and GitHub; nothing else is sent.</span>" +
           (su.state === "error" ? `<span>The last download stopped: ${esc(su.error || "")}. It resumes where it stopped.</span>` : "");
         const go = document.createElement("button");
@@ -2744,6 +2764,7 @@ function addImageFile(file) {
 }
 // documents (PDF / Word / text): sent with the message; "plagiarism check" / "humanize" / any question
 let pendingDocs = [];
+let pendingPick = null;  // 🎯 the block of the page the user clicked on the preview: the message is a change to it
 const INPUT_PLACEHOLDER = $("input").placeholder;
 const DOC_EXT = /\.(pdf|docx|txt|md)$/i;
 async function addDocFile(file) {
@@ -2763,9 +2784,19 @@ function addFile(file) {
 }
 function renderAttachments() {
   const box = $("attachments");
-  box.hidden = !pendingImages.length && !pendingDocs.length;
+  box.hidden = !pendingImages.length && !pendingDocs.length && !pendingPick;
   autosize();  // (the send arrow: ready with a picture alone)
   box.innerHTML = "";
+  if (pendingPick) {
+    const item = make("div", "attachment pick", `🎯 <span>&lt;${esc(pendingPick.tag)}&gt; ${esc((pendingPick.words || "").slice(0, 50))}</span>`);
+    item.title = "The part you clicked on the page: what you write now is changed in it";
+    const x = make("button", "attachment-x", "✕");
+    x.type = "button";
+    x.title = "Remove";
+    x.onclick = () => { pendingPick = null; renderAttachments(); };
+    item.appendChild(x);
+    box.appendChild(item);
+  }
   pendingDocs.forEach((d, i) => {
     const item = make("div", "attachment doc", `📄 <span>${esc(d.name)}</span><small>${Math.max(1, Math.round(d.size / 1024))} KB</small>`);
     const x = make("button", "attachment-x", "✕");
@@ -2845,11 +2876,18 @@ $("composer").addEventListener("submit", (e) => {
     const images = shownImgs.map((u, k) => metas[k].crop || u);  // a marked picture: only the part marked
     const shots = metas.map((m) => !!m.own), marked = metas.map((m) => !!m.crop);
     const marks = metas.map((m) => (m.crop && m.shot ? { box: m.box, size: m.size, ...m.shot } : null));  // (where on the page)
+    const pick = pendingPick;  // 🎯 a part clicked on the page goes with the pictures too
+    pendingPick = null;
     pendingImages = [];
     imgMeta.clear();
     renderAttachments();
-    send(text || "(screenshot)", { body: { message: text.trim(), images, shots, marked, marks }, images: shownImgs,
-                                   shown: (text.trim() || "(screenshot)") + `  🖼×${images.length}` });
+    send(text || "(screenshot)", { body: { message: text.trim(), images, shots, marked, marks, pick }, images: shownImgs,
+                                   shown: (text.trim() || "(screenshot)") + `  🖼×${images.length}` + (pick ? `  🎯 <${pick.tag}>` : "") });
+  } else if (pendingPick && text.trim()) {  // 🎯 a change to the part clicked on the page
+    const pick = pendingPick;
+    pendingPick = null;
+    renderAttachments();
+    send(text, { body: { message: text.trim(), pick }, shown: `🎯 <${pick.tag}> ${(pick.words || "").slice(0, 40)} · ${text.trim()}` });
   } else send(text);  // answer / code / build plan / circuit / picture: M42 decides from the message
 });
 $("input").addEventListener("keydown", (e) => {

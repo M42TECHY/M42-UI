@@ -28,7 +28,7 @@ var all=[].slice.call(document.querySelectorAll('nav.m42-nav, header, section, f
 var secs=all.filter(function(s){return !all.some(function(o){return o!==s&&o.contains(s);});});
 var pageReveal=H.getAttribute('data-m42-motion')==='none'?'none':(H.getAttribute('data-m42-reveal')||'none');
 var pageHover=H.getAttribute('data-m42-hover')||'none';
-var out=secs.map(function(s,i){
+var nth={};var out=secs.map(function(s,i){var tg=s.tagName.toLowerCase();var ti=nth[tg]=(nth[tg]===undefined?0:nth[tg]+1);
  var r=s.getBoundingClientRect();
  var imgs=[].slice.call(s.querySelectorAll('img')).filter(seen).map(function(im){var b=im.getBoundingClientRect();
   return {src:im.getAttribute('src')||'',w:Math.round(b.width),h:Math.round(b.height)};});
@@ -40,7 +40,7 @@ var out=secs.map(function(s,i){
   return {text:txt(c).slice(0,100),photo:im?(im.getAttribute('src')||''):''};});
  var own=s.getAttribute('data-m42-sec-reveal'),ownH=s.getAttribute('data-m42-sec-hover');
  var R=window.M42Reveal;
- return {key:s.id||(s.tagName.toLowerCase()+'-'+i),tag:s.tagName.toLowerCase(),
+ return {key:s.id||(tg+'-'+ti),tag:s.tagName.toLowerCase(),
   title:txt(s.querySelector('h1,h2')).slice(0,90),eyebrow:txt(s.querySelector('.m42-eyebrow')).slice(0,60),
   block:s.getAttribute('data-m42-block')||s.getAttribute('data-m42-comp')||'',
   text:txt(s).slice(0,1200),imgs:imgs.slice(0,16),cards:cards,
@@ -55,10 +55,22 @@ var page={motion:H.getAttribute('data-m42-motion')||'',reveal:pageReveal,hover:p
  bg:bs.backgroundColor,font:(bs.fontFamily||'').split(',')[0],
  brand:txt(document.querySelector('.navbar-brand,.m42-brand')).slice(0,60),title:document.title,
  height:Math.round(Math.max(H.scrollHeight,document.body.scrollHeight))};
-var p=document.createElement('pre');p.id='__m42_facts';p.style.display='none';
+var B=[].slice.call(document.querySelectorAll('[data-bs-toggle=modal]')).slice(0,4),k=0;
+function done(){var p=document.createElement('pre');p.id='__m42_facts';p.style.display='none';
 p.textContent=JSON.stringify({page:page,sections:out});document.body.appendChild(p);}
+function next(){if(k>=B.length)return done();var b=B[k++],sec=b.closest('header,section,footer,nav'),key=sec?(sec.id||''):'';
+if(sec&&!sec.style.transform)sec.style.transform='translateY(0px)';try{b.click();}catch(x){}setTimeout(function(){var m=document.querySelector(b.getAttribute('data-bs-target')||'#__none'),
+f=m&&m.querySelector('input,textarea,select'),r=f&&f.getBoundingClientRect(),
+top=r&&r.width?document.elementFromPoint(r.left+r.width/2,r.top+r.height/2):null,
+shown=!!(m&&m.classList.contains('show'));
+var o=out.filter(function(x){return x.key===key;})[0]||out[0];if(o){o.popups=o.popups||[];o.popups.push({button:txt(b).slice(0,30),opens:shown,
+field:!!f,typeable:!!(f&&top&&(top===f||f.contains(top))),cover:top&&f&&!(top===f||f.contains(top))?(top.className||top.tagName).toString().split(' ')[0]:''});}
+try{if(m&&window.bootstrap&&bootstrap.Modal.getInstance(m))bootstrap.Modal.getInstance(m).hide();}catch(x){}
+setTimeout(next,350);},450);}
+next();}
 addEventListener('load',function(){setTimeout(run,400);});})();</script>"""
 
+SEEN = {}  # (page, its text's sha1, with a picture) -> what see() measured
 WIDTH = 1280
 FIRST_HEIGHT = 6000  # the window: the page's facts and its picture are measured in the same one
 MAX_HEIGHT = 12000
@@ -98,7 +110,7 @@ def _chrome(args, timeout=60):
 
 
 def _facts_at(tmp, height):
-    r = _chrome([f"--window-size={WIDTH},{height}", "--virtual-time-budget=3000", "--dump-dom", tmp.resolve().as_uri()])
+    r = _chrome([f"--window-size={WIDTH},{height}", "--virtual-time-budget=6000", "--dump-dom", tmp.resolve().as_uri()])
     if not r:
         return None
     m = re.search(r'<pre id="__m42_facts"[^>]*>(.*?)</pre>', r.stdout.decode("utf-8", "replace"), re.S)
@@ -118,6 +130,14 @@ def see(page, picture=True):
     page = Path(page)
     if not page.is_file():
         return None
+    import hashlib
+    lib_ = [f for d in ("lib", "css", "js") if (page.parent / d).is_dir() for f in (page.parent / d).iterdir() if f.is_file()]
+    # (the page and the files it loads: the kit synced under the same page was read from the old facts, 2026-11-17)
+    sig = (str(page.resolve()), hashlib.sha1(page.read_bytes() + str(sorted((f.name, f.stat().st_mtime_ns) for f in lib_)).encode()).hexdigest(),
+           bool(picture))
+    for (p_, h_, pic_), got in list(SEEN.items()):  # ⚡ the page as measured last time (the next edit's "before" is the
+        if p_ == sig[0] and h_ == sig[1] and (pic_ or not picture):  # last one's "after"): no browser again
+            return got
     tmp = _copy(page)
     try:
         height = FIRST_HEIGHT
@@ -136,6 +156,9 @@ def see(page, picture=True):
                     c["photo"] = ""
         got["window"] = height
         got["image"] = _picture(tmp, height) if picture else None
+        SEEN[sig] = got
+        while len(SEEN) > 6:
+            SEEN.pop(next(iter(SEEN)))
         return got
     finally:
         with contextlib.suppress(OSError):
@@ -209,6 +232,10 @@ def describe(s):
             + (f' ({len(loose)} outside the cards: ' + ", ".join(f'{im["src"].split("/")[-1]} {im["w"]}x{im["h"]}' for im in loose[:3]) + ")" if loose else "")
             + f"; {cards}"
             + (f'; buttons: {", ".join(s["buttons"][:5])}' if s["buttons"] else "")
+            + ("; popups: " + "; ".join(f'"{q["button"]}" ' + (("opens a form that can be typed in" if q["typeable"] else
+                                                                     f'opens a form COVERED by {q["cover"] or "something"}: it cannot be typed in')
+                                                                    if q["field"] else "opens" if q["opens"] else "does NOT open")
+                                       for q in s.get("popups") or []) if s.get("popups") else "")
             + f'; comes in with "{s["reveal"]}"' + (" (its own)" if s["own_reveal"] else " (as the page)")
             + f', {s["moving"]} of its things move in; hover "{s["hover"]}"' + (" (its own)" if s["own_hover"] else " (as the page)")
             + f', {s["hovering"]} things react to the mouse; {s["height"]} px tall')
@@ -250,6 +277,8 @@ def compare(before, after, targets=()):
             for f in ("reveal", "hover"):
                 if x[f] != y[f]:
                     d.append(f"{f} {x[f]!r} -> {y[f]!r}")
+            if (x.get("popups") or []) != (y.get("popups") or []):
+                d.append("popups " + json.dumps(x.get("popups") or []) + " -> " + json.dumps(y.get("popups") or []))
             if x["moving"] != y["moving"]:
                 d.append(f'things moving in {x["moving"]} -> {y["moving"]}')
             if abs(x["height"] - y["height"]) > 60:
@@ -306,12 +335,28 @@ def pair_image(before, after, keys):
 
 # ----------------------------------------------------------------------------------------- the side-effect guard
 def _section_span(text, key):
-    """(start, end) of <section id="key" ...>...</section> in the page, nested sections counted."""
-    m = re.search(r'<section\b[^>]*\bid="' + re.escape(key) + r'"[^>]*>', text)
+    """(start, end) of a part in the page: <tag id="key">...</tag>, or the n-th top part of its tag when it has no id
+    (a key "nav-0", "header-0", "footer-0": the menu bar, the hero, the footer), nested ones of its tag counted."""
+    m = re.search(r'<(section|header|nav|footer)\b[^>]*\bid="' + re.escape(key) + r'"[^>]*>', text)
+    tag = m.group(1) if m else ""
     if not m:
-        return None
+        km = re.fullmatch(r"(nav|header|footer|section)-(\d+)", key)
+        if not km:
+            return None
+        tag, n = km.group(1), int(km.group(2))
+        opens, depth = [], 0
+        for t in re.finditer(r"<(/?)" + tag + r"\b[^>]*>", text):
+            if t.group(1):
+                depth -= 1
+            else:
+                if depth == 0:
+                    opens.append(t)
+                depth += 1
+        if n >= len(opens):
+            return None
+        m = opens[n]
     depth, i = 1, m.end()
-    for t in re.finditer(r"<(/?)section\b[^>]*>", text[i:]):
+    for t in re.finditer(r"<(/?)" + tag + r"\b[^>]*>", text[i:]):
         depth += -1 if t.group(1) else 1
         if depth == 0:
             return m.start(), i + t.end()
@@ -324,7 +369,8 @@ def restore_sections(new_text, old_text, keys):
     done = []
     for key in keys:
         a, b = _section_span(new_text, key), _section_span(old_text, key)
-        if a and b:
+        # (the same part in both: its opening tag the same, else a part found by its place could be another one)
+        if a and b and new_text[a[0]:new_text.index(">", a[0]) + 1] == old_text[b[0]:old_text.index(">", b[0]) + 1]:
             new_text = new_text[:a[0]] + old_text[b[0]:b[1]] + new_text[a[1]:]
             done.append(key)
     return new_text, done

@@ -11,6 +11,7 @@ layout come out right. The checks follow the embedded rule: from the library's o
   - a phone-width render measures overflow, text contrast, images without alt, inputs without labels, the h1.
 """
 import colorsys
+import contextlib
 import difflib
 import hashlib
 import json
@@ -401,6 +402,11 @@ def make_look(request, title="", look=None):
         hue = round(colorsys.rgb_to_hls(r, g, b)[0] * 360)
         why = look.get("why") or "picked for this site's content"
         primary, on = _readable((r, g, b), hue)
+        if ("named_colours" in INTENT or look.get("why") == "changed by the user") and contrast((r, g, b), INK) >= 4.5 \
+                and contrast((r, g, b), WHITE) < 4.6:
+            # a light colour the USER named stays that colour, with dark text on it (light blue #60a5fa was made a dark
+            # #076eed for white text: "light blue" asked, a dark blue seen, 2026-11-17)
+            primary, on = (r, g, b), INK
         if look.get("exact"):  # a reference's own colour stays as it is (#44bddd became #1b7c96 for white text on it):
             c = (r, g, b)  # the text on it is dark or white, whichever reads; text in the colour uses its ink shade
             if max(contrast(c, INK), contrast(c, WHITE)) >= 4.5:
@@ -1059,8 +1065,8 @@ function bg(e){var B=bgs(e);return B?B[0]:null;}
 var seen={},n=0;[].slice.call(document.querySelectorAll('body *')).forEach(function(e){if(n>500||R.contrast.length>=6)return;
 var t=[].filter.call(e.childNodes,function(c){return c.nodeType===3&&c.textContent.trim().length>1;}).map(function(c){return c.textContent.trim();}).join(' ');
 if(!t||/^(SCRIPT|STYLE|NOSCRIPT|OPTION)$/.test(e.tagName)||!vis(e))return;n++;var s=getComputedStyle(e),B=bgs(e),f0=rgb(s.color);if(!B||!f0||/text/.test(s.webkitBackgroundClip||s.backgroundClip||''))return;
-var r=99;B.forEach(function(b){var f=mix(f0,b),l1=lum(f),l2=lum(b);r=Math.min(r,(Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05));});var px=parseFloat(s.fontSize),big=px>=24||(px>=18.6&&parseInt(s.fontWeight)>=700),need=big?3:4.5;
-if(r<need-0.05){var k=d(e);if(!seen[k]){seen[k]=1;R.contrast.push({el:k,text:t.slice(0,40),ratio:Math.round(r*100)/100,need:need});}}});
+var r=99,wb=null;B.forEach(function(b){var f=mix(f0,b),l1=lum(f),l2=lum(b),q=(Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);if(q<r){r=q;wb=b;}});var px=parseFloat(s.fontSize),big=px>=24||(px>=18.6&&parseInt(s.fontWeight)>=700),need=big?3:4.5;
+if(r<need-0.05){var k=d(e);if(!seen[k]){seen[k]=1;var P=[],x=e;for(var i=0;x&&x!==document.body&&i<5;i++,x=x.parentElement){if(x.id){P.unshift('#'+x.id);break;}var cl=(typeof x.className==='string'?x.className:'').trim().split(/\\s+/).filter(function(c){return /^m42-/.test(c);})[0];P.unshift(x.tagName.toLowerCase()+(cl?'.'+cl:''));}R.contrast.push({el:k,text:t.slice(0,40),ratio:Math.round(r*100)/100,need:need,fg:f0.slice(0,4),bg:wb?wb.slice(0,3):null,path:P.join(' ')});}}});
 var LIB='.swal2-container,#toast-container';
 [].slice.call(document.images).forEach(function(i){if(!i.hasAttribute('alt')&&!i.closest(LIB))R.noalt.push(d(i)+(i.getAttribute('src')?' '+i.getAttribute('src').split('/').pop().slice(0,40):''));});
 [].slice.call(document.querySelectorAll('input,select,textarea')).forEach(function(i){var ty=(i.type||'').toLowerCase();if(/hidden|submit|button|reset|image/.test(ty))return;
@@ -1662,6 +1668,35 @@ def preview_file(root, pid, rel):
     return p if base in p.parents and p.is_file() and not p.name.startswith(".") else None
 
 
+PICK_JS = """<script id="m42-pick">(function(){var on=false,box=null,SIG="%s";
+function mark(el){if(!box){box=document.createElement('div');box.style.cssText='position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #f43f5e;border-radius:6px;background:rgba(244,63,94,.10);display:none';document.documentElement.appendChild(box);}
+if(!el){box.style.display='none';return;}var r=el.getBoundingClientRect();box.style.display='block';box.style.left=r.left+'px';box.style.top=r.top+'px';box.style.width=r.width+'px';box.style.height=r.height+'px';}
+function at(e){return e.target&&e.target.closest?e.target.closest('[data-m42-n]'):null;}
+function off(){on=false;mark(null);document.documentElement.style.cursor='';}
+addEventListener('message',function(e){if(e.data==='m42:pick-on'){on=true;document.documentElement.style.cursor='crosshair';}else if(e.data==='m42:pick-off')off();});
+document.addEventListener('mouseover',function(e){if(on)mark(at(e));},true);
+document.addEventListener('click',function(e){if(!on)return;var el=at(e);if(!el)return;e.preventDefault();e.stopPropagation();
+var w=(el.innerText||el.getAttribute('alt')||el.getAttribute('placeholder')||el.getAttribute('aria-label')||'').replace(/\\s+/g,' ').trim().slice(0,80);
+parent.postMessage({m42pick:{n:+el.getAttribute('data-m42-n'),tag:el.tagName.toLowerCase(),words:w,sig:SIG,
+page:location.pathname.split('/').slice(3).join('/')||'index.html'}},'*');off();},true);
+addEventListener('keydown',function(e){if(on&&e.key==='Escape'){off();parent.postMessage({m42pick:null},'*');}});})();</script>"""
+
+
+def pickable(page):
+    """🎯 A page for the preview: each block of its body marked with its node id (domnode), and a small script: in
+    pick mode (M42's 🎯 button) a click on the page says which block it is. The project's file never has these."""
+    import domnode
+    marked = domnode.annotate(page)
+    js = PICK_JS % domnode.signature(page)
+    i = marked.lower().rfind("</body>")
+    return marked[:i] + js + marked[i:] if i >= 0 else marked + js
+
+
+def unpickable(page):
+    import domnode
+    return domnode.strip(re.sub(r'<script id="m42-pick">.*?</script>', "", page, flags=re.S))
+
+
 def preview_zip(root, pid):
     """index.html + lib/ (only the files it uses, the icon fonts with their CSS) as zip bytes; None if unknown."""
     import io
@@ -1672,7 +1707,9 @@ def preview_zip(root, pid):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for p in sorted(base.rglob("*")):
-            if p.is_file() and not p.name.startswith("."):
+            if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in (".html", ".htm"):
+                z.writestr("m42-page/" + p.relative_to(base).as_posix(), unpickable(p.read_text(encoding="utf-8", errors="ignore")))
+            elif p.is_file() and not p.name.startswith("."):
                 z.write(p, "m42-page/" + p.relative_to(base).as_posix())
     return buf.getvalue()
 
@@ -1709,6 +1746,8 @@ def make_preview_folder(src_root, root, files):
         s = Path(src_root) / rel
         if s.is_file() and rel.endswith((".html", ".htm")):
             copy_assets(s.read_text(encoding="utf-8", errors="ignore"), src_root, dest)
+            with contextlib.suppress(OSError, ValueError):  # 🎯 its blocks clickable on the preview (the copy only)
+                (dest / rel).write_text(pickable(s.read_text(encoding="utf-8")), encoding="utf-8")
     for sub in ("lib", "models"):  # the kit, and the 3D models of a 3D scene (the user's, or found online)
         for p in (Path(src_root) / sub).rglob("*") if (Path(src_root) / sub).is_dir() else []:
             if p.is_file() and not p.name.startswith("."):
@@ -1732,3 +1771,133 @@ def _kit_3d_classes():
         except OSError:
             _3d_classes = set()
     return _3d_classes
+
+
+# ---- 📦 a library the user named (agent: their asks, 2026-11-17: "the JS / CSS the user asks for is used"): its npm
+# package from jsDelivr, the version resolved once and kept with the page (the same file on every redraw), the files
+# kept in m42/cache/libs and copied into the site's lib/ (the page works offline), linked BEFORE M42's own CSS / JS:
+# M42's layout stays whole over a framework's CSS, and M42's script finds the library (Chart.js draws its charts)
+LIB_CACHE = Path(__file__).resolve().parent / "cache" / "libs"
+# a library the user names that has a way of its own to run on a page (data): Tailwind's npm package is its build tool;
+# on a page it runs as its browser build, which writes its classes into cascade layers: M42's and Bootstrap's CSS,
+# outside any layer, always win over them (the CSS standard), so Tailwind adds and never undoes M42's look (the user,
+# 2026-11-17: "their CSS used, no collapse"); its colours and fonts are tied to the page's theme (TAILWIND_THEME)
+LIB_ADAPTERS = {"tailwindcss": {"npm": "@tailwindcss/browser", "kind": "js", "tailwind": True}}
+TAILWIND_THEME = """<style type="text/tailwindcss">
+@theme inline {
+  --color-primary: var(--m42-accent, #4f46e5); --color-secondary: var(--m42-accent-2, #06b6d4);
+  --color-accent: var(--m42-accent-3, #f59e0b); --color-ink: var(--m42-text, #0f172a); --color-muted: var(--m42-muted, #64748b);
+  --color-surface: var(--m42-surface, #ffffff); --color-page: var(--m42-bg, #f8fafc); --color-line: var(--m42-border, #e2e8f0);
+  --font-sans: var(--m42-font, ui-sans-serif, system-ui, sans-serif); --radius-lg: var(--m42-radius, 12px);
+}
+</style>"""
+POPULAR_HITS = 1_000_000  # jsDelivr downloads a month a library needs to be fetched (Chart.js: hundreds of millions)
+NPM_RX = re.compile(r"^(@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*$")
+
+
+def _get_json(url):
+    import urllib.request
+    with urllib.request.urlopen(url, timeout=30) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def fetch_library(lib):
+    """lib: {"name", "npm", "kind", "version"?}. Returns it with "version" and "files" ([(local path, kind)]), or None."""
+    import urllib.request
+    npm = str(lib.get("npm") or "").strip().lower()
+    if npm in LIB_ADAPTERS:  # (its own way to run on a page)
+        lib = dict(lib, **LIB_ADAPTERS[npm])
+        npm = lib["npm"]
+    if not NPM_RX.match(npm) or npm in ("bootstrap", "jquery", "animejs", "sweetalert2", "toastr", "three"):  # (the kit has them)
+        return None
+    ver = str(lib.get("version") or "")
+    if not ver:  # (a well-known library only: "Vanilla JS" found npm's "vanilla" 0.0.5, a stranger's package, 2026-11-17)
+        try:
+            hits = _get_json(f"https://data.jsdelivr.com/v1/stats/packages/npm/{npm}?period=month").get("hits") or {}
+            if int(hits.get("total") or 0) < POPULAR_HITS:
+                return None
+        except (OSError, ValueError, TypeError):
+            return None
+        try:
+            ver = str(_get_json(f"https://data.jsdelivr.com/v1/packages/npm/{npm}/resolved").get("version") or "")
+        except (OSError, ValueError):
+            return None
+    if not re.match(r"^\d+\.\d+\.\d+", ver):
+        return None
+    try:
+        ep = _get_json(f"https://data.jsdelivr.com/v1/packages/npm/{npm}@{ver}/entrypoints").get("entrypoints") or {}
+    except (OSError, ValueError):
+        return None
+    files = []
+    # the entry of its own kind only: a CSS framework's CSS (Tailwind's "js" entry is its Node build, no use on a page)
+    adapted = npm in {a["npm"] for a in LIB_ADAPTERS.values()}
+    for kind in ([lib.get("kind")] if adapted and lib.get("kind") in ("css", "js") else ["css", "js"]):
+        f = (ep.get(kind) or {}).get("file")
+        if not f or not re.match(r"^/[\w./@-]+\.(?:js|css)$", f):
+            continue
+        if kind == "js" and kind != lib.get("kind") and not re.search(r"/dist/|\.min\.js$|umd|browser", f):
+            continue  # (the other kind's file only when it is built for a page: a CSS framework's "js" is its Node build)
+        dest = LIB_CACHE / f"{npm.replace('/', '__')}@{ver}" / Path(f).name
+        if not dest.is_file():
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with urllib.request.urlopen(f"https://cdn.jsdelivr.net/npm/{npm}@{ver}{f}", timeout=60) as r:
+                    data = r.read()
+                if len(data) < 200:
+                    continue
+                dest.write_bytes(data)
+            except OSError:
+                continue
+        files.append((str(dest), kind))
+    return dict(lib, npm=npm, version=ver, files=files) if files else None
+
+
+def link_libraries(html, root, libs):
+    """The fetched libraries copied into root/lib/ and linked before M42's own CSS and script."""
+    import shutil
+    css_tags, js_tags = [], []
+    for lib in libs or []:
+        for src, kind in lib.get("files") or []:
+            name = f"{lib['npm'].replace('/', '__').lstrip('@')}-{lib['version']}-{Path(src).name}"  # (no "@" in a page's URL)
+            dest = Path(root) / "lib" / name
+            try:
+                if not dest.is_file():
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(src, dest)
+            except OSError:
+                continue
+            if f"lib/{name}" in html:
+                continue
+            (css_tags if kind == "css" else js_tags).append(
+                f'<link rel="stylesheet" href="lib/{name}">' if kind == "css" else f'<script src="lib/{name}"></script>')
+    if any(l.get("tailwind") and l.get("files") for l in libs or []) and 'type="text/tailwindcss"' not in html:
+        html = html.replace("</head>", TAILWIND_THEME + "\n</head>", 1)  # (Tailwind's colours / fonts = the page's theme)
+    if css_tags:  # (FIRST: Bootstrap's and M42's CSS come after it and win where they meet: a framework's reset of the
+        # page's base styles does not undo M42's look; its own classes still work)
+        m = re.search(r'<link[^>]+rel="stylesheet"[^>]*>', html)
+        html = (html[:m.start()] + "\n".join(css_tags) + "\n" + html[m.start():]) if m else html.replace("</head>", "\n".join(css_tags) + "\n</head>", 1)
+    if js_tags:
+        m = re.search(r'<script[^>]+lib/m42-ui\.js[^>]*>', html)
+        html = (html[:m.start()] + "\n".join(js_tags) + "\n" + html[m.start():]) if m else html.replace("</body>", "\n".join(js_tags) + "\n</body>", 1)
+    return html
+
+
+def contrast_fix(c):
+    """(selector, colour) for a text the page check found too faint (its colour, its background, the contrast it needs):
+    its own colour moved toward black or white, a step at a time, until it reads (2026-11-17: a coder spent 4 minutes
+    on one such text and made it worse, 4.25 -> 3.63). None when the check gave no colours. (The browser gives 0-255;
+    this file's colours are 0-1.)"""
+    fg, bg, path = c.get("fg"), c.get("bg"), str(c.get("path") or "")
+    if not (isinstance(fg, list) and len(fg) >= 3 and isinstance(bg, list) and len(bg) >= 3 and path):
+        return None
+    a = fg[3] if len(fg) > 3 and fg[3] is not None else 1
+    back = [float(bg[i]) / 255 for i in range(3)]
+    cur = [(float(fg[i]) / 255) * a + back[i] * (1 - a) for i in range(3)]
+    need = float(c.get("need") or 4.5) + 0.2
+    to = (0.0, 0.0, 0.0) if contrast((0, 0, 0), back) >= contrast((1, 1, 1), back) else (1.0, 1.0, 1.0)
+    for k in range(1, 21):
+        t = k / 20
+        col = tuple(cur[i] + (to[i] - cur[i]) * t for i in range(3))
+        if contrast(col, back) >= need:
+            return path, _hex(col)
+    return path, _hex(to)

@@ -62,7 +62,7 @@ DEFAULT_CONFIG = {
     "web_enabled": True,
     # free photo libraries for the pages (photos.py); empty: Openverse (no key) is used
     "pexels_key": "",
-    "speech_engine": "small",  # 🎤 small (Whisper small: every language, ~3 s) / turbo (best, slow on CPU) / indic-ta
+    "speech_engine": "indic-ta",  # 🎤 indic-ta (IndicConformer Tamil: Tamil and Tanglish, live, ~0.2 s) / small (Whisper small: English)
     "pixabay_key": "",
     "workspace": str((APP_DIR.parent / "workspace").resolve()),
 }
@@ -1275,7 +1275,7 @@ class Handler(BaseHTTPRequestHandler):
             images = body.get("images")
             if isinstance(images, list) and images:  # screenshots: the vision model reads them first
                 return self._chat_with_images(body.get("message", "").strip(), images, body.get("shots"), body.get("marked"),
-                                              body.get("marks"))
+                                              body.get("marks"), pick=body.get("pick"))
             sel = body.get("lines")
             if isinstance(sel, dict) and sel.get("path"):  # 📁 lines selected in a file: only those lines changed
                 ask = str(body.get("message") or "").strip()
@@ -1289,7 +1289,7 @@ class Handler(BaseHTTPRequestHandler):
                 path = str(sel["path"])
                 return self._stream(ask, f"✏ {path} · " + (f"line {a}" if a == b else f"lines {a}–{b}") + f": {ask}", "chat",
                                     lambda emit: State.agent.edit_lines(path, a, b, ask, emit), warm=False)
-            return self._chat(body.get("message", "").strip(), verify=bool(body.get("verify")))
+            return self._chat(body.get("message", "").strip(), verify=bool(body.get("verify")), pick=body.get("pick"))
         if url.path == "/api/page/preview":  # ▶ Run: save the page (kit as local files) for the popup
             html = str(body.get("html") or "")
             if not html.strip() or len(html) > 2_000_000:
@@ -1317,7 +1317,8 @@ class Handler(BaseHTTPRequestHandler):
                 wav = base64.b64decode(audio.split(",", 1)[1] if audio.startswith("data:") else audio)
                 if len(wav) < 1000 or len(wav) > 60_000_000:
                     raise ValueError("no recording")
-                text, secs = speech.transcribe(wav, str(body.get("language") or "auto"), engine=State.config.get("speech_engine"))
+                text, secs = speech.transcribe(wav, str(body.get("language") or "auto"), engine=State.config.get("speech_engine"),
+                                               prompt=str(body.get("prompt") or "")[-400:], best=bool(body.get("final")))
                 print(f"[mic] {len(wav) // 32000:.0f}s of audio -> {len(text)} letters in {secs}s", flush=True)
             except (ValueError, OSError, RuntimeError) as e:
                 return self._send(200, {"ok": False, "error": str(e)})
@@ -1593,7 +1594,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 
-    def _chat_with_images(self, message, images, shots=None, marked=None, marks=None):
+    def _chat_with_images(self, message, images, shots=None, marked=None, marks=None, pick=None):
         """A message with pictures: the pictures are the design reference of the page / site (its layout, look and
         colours; the content is the user's own), or the page to rebuild ("clone this")."""
         if not State.agent.workspace.roots:
@@ -1628,14 +1629,15 @@ class Handler(BaseHTTPRequestHandler):
                 return build_clone(message, spec, webclone.palette(images[0]), emit, auto, reference=images[0])
             agent._edit_marked = any(m for _o, m in flags)  # (a marked part: its section found from the picture)
             agent._edit_mark = page_mark(marks)  # (a mark on a 📷: the very place on the page)
+            agent._edit_pick = agent.pick_node(pick) if pick else None  # (🎯 the part clicked on the page: the change is there)
             try:
                 return page_with_reference(message, images, emit, vision)
             finally:
-                agent._edit_marked, agent._edit_mark = False, None
+                agent._edit_marked, agent._edit_mark, agent._edit_pick = False, None, None
 
         return self._stream(message or "picture", shown, None, work)
 
-    def _chat(self, message, verify=False):
+    def _chat(self, message, verify=False, pick=None):
         """Every message is about the web page / site in the open folder: a change to it (sitedit), the answer to
         its one question, a page to clone from a URL, or a new page / site (spec -> reference -> plan -> built)."""
         agent = State.agent
@@ -1679,6 +1681,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._stream(message, "🌐 " + message, None, lambda emit: clone_site(message, emit))
         if not sitedit.load(agent.workspace.roots[0][1]):  # an empty folder: a page to build
             return self._stream(message, "🎨 " + message, "chat", lambda emit: web_request(message, emit))
+
+        picked = agent.pick_node(pick) if pick else None
+        if picked and message:  # 🎯 the user clicked a part of the preview and says what to change in it: an edit there
+
+            def edit_picked(emit):
+                agent.stop_event.clear()
+                agent._edit_pick = picked
+                try:
+                    return agent.edit_site(message, emit)
+                finally:
+                    agent._edit_pick = None
+            return self._stream(message, f'🎯 {message}', "chat", edit_picked, warm=False)
 
         def routed(emit):
             """What the message is for the site here, as the model decides it (an edit, the same page again, another page,

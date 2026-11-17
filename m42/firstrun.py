@@ -7,7 +7,7 @@ model that fits, asks permission, downloads, installs, runs the app").
   2. choose_tier(pc): the model that fits: Qwen3.5-2B for an 8 GB PC, Qwen3.5-4B from 12 GB (16 GB PCs), or a
      graphics card of its own with 6 GB or more.
   3. plan(tier): every file this PC lacks, with its size: llama-server (llama.cpp's release for this system), the
-     model and its picture reader, the speech models (Whisper small: every language; the Whisper Tanglish test model)
+     model and its picture reader, the speech models (Whisper small: English and every language; IndicConformer Tamil: Tamil and Tanglish, live)
      and the voice detector.
   4. Nothing downloads before the user says yes: the installer asks in its window (setup.py), the app shows the list
      and a Download button (/api/setup/start). Each file is checked by its size and SHA-256; a broken download resumes.
@@ -55,15 +55,17 @@ TIERS = {
 }
 MODEL_FILES = TIERS["4b"]["files"]  # (the old name)
 
-# speech (speech.py): Whisper small for every language, the Tanglish fine-tune (the test engine), the voice detector.
+# speech (speech.py): Whisper small for English (and every language), IndicConformer Tamil (Tamil and Tanglish speech,
+# ~0.2 s a phrase, written in Tamil letters: the 4B reads them well), the voice detector. (2026-11-17, the user: "Whisper
+# small for English, IndicConformer Tamil; the rest is not needed": the Whisper Tanglish fine-tune is no longer fetched.)
 # (repo or url, file there, saved as (under models/), bytes, sha256 or None for a small text file)
 WHISPER_SMALL_GGML = ("ggerganov/whisper.cpp", "ggml-small-q5_1.bin", "ggml-small-q5_1.bin", 190085487,
                       "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb")
-TANGLISH_REPO = "Badri0510/whisper-tanglish-100hr-production"
-TANGLISH = [(TANGLISH_REPO, f, f"whisper-tanglish-badri/{f}", n, sha) for f, n, sha in (
-    ("model.safetensors", 291815008, "83a1a5403ce1c6af221c4dba89eee82bd68437bec72b945fb2e55cbf3d965fad"),
-    ("config.json", 1222, None), ("generation_config.json", 3713, None), ("preprocessor_config.json", 315, None),
-    ("processor_config.json", 409, None), ("tokenizer.json", 3931230, None), ("tokenizer_config.json", 2095, None))]
+# AI4Bharat's IndicConformer (MIT) as sherpa-onnx int8 CTC, Tamil, and the tokens shared by its languages
+INDIC_REPO = "NiranjanYadavIN/indicconformer-sherpa-onnx"
+INDIC_TA = [(INDIC_REPO, "ta/model.int8.onnx", "indicconformer/ta/model.int8.onnx", 197595513,
+             "abb7b59d706b8d27ba3fb5e5e3db7671c9e1a09bf7bc6122de507c60030e65fb"),
+            (INDIC_REPO, "tokens.txt", "indicconformer/tokens.txt", 67605, None)]
 # a Mac has no whisper-server build: Whisper small runs in Python there (transformers), from OpenAI's own files
 WHISPER_SMALL_HF = [("openai/whisper-small", f, f"whisper-small/{f}", n, sha) for f, n, sha in (
     ("model.safetensors", 966995080, "1d7734884874f1a1513ed9aa760a4f8e97aaa02fd6d93a3a85d27b2ae9ca596b"),
@@ -271,7 +273,7 @@ def plan(tier=None, speech=True):
                 items.append(_hf(WHISPER_SMALL_GGML, "speech"))
         else:  # (a Mac: Whisper small in Python)
             items += [_hf(f, "speech") for f in WHISPER_SMALL_HF if not _have(f[2], f[3])]
-        items += [_hf(f, "speech") for f in TANGLISH if not _have(f[2], f[3])]
+        items += [_hf(f, "speech") for f in INDIC_TA if not _have(f[2], f[3])]
         if not _have(VAD[2], VAD[3]):
             items.append(_hf(VAD, "speech"))
     return items

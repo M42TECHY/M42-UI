@@ -54,6 +54,10 @@ def complete_json(base_url, model, messages, schema, max_tokens=700, api_key=Non
             raise LLMStopped("stopped")
         if SPEC_BATCH_RX.search(str(e)):
             return _complete_json(base_url, model, messages, schema, max_tokens, api_key, timeout, think, no_cache=True, temperature=temperature)
+        if "valid JSON" in str(e) and not think:  # (now and then an answer under the grammar did not parse: a POS's
+            # bill was lost and a coder spent 5 minutes patching one in, 2026-11-17; asked again once, fresh, a little warmer)
+            return _complete_json(base_url, model, messages, schema, max_tokens, api_key, timeout, think, no_cache=True,
+                                  temperature=min(0.7, temperature + 0.2))
         if "connection" not in str(e).lower():
             raise
         time.sleep(3)
@@ -66,13 +70,31 @@ def complete_json(base_url, model, messages, schema, max_tokens=700, api_key=Non
 SPEC_BATCH_RX = re.compile(r"speculative batch|inconsistent sequence positions|failed to decode draft", re.I)
 
 
+def json_constraint(base_url, schema, think=0):
+    """⚡ How a JSON answer is held to its schema: on M42's own llama-server a grammar for COMPACT JSON (jsongrammar:
+    the 4B's pretty JSON was ~44% newlines and indentation in a page plan, 2026-11-16), else the server's json_schema
+    (another server, a schema the grammar does not cover, or thinking, whose words come before the JSON)."""
+    if not think:
+        try:
+            import llamacpp
+            local = base_url.rstrip("/") == llamacpp.URL.rstrip("/")
+        except ImportError:
+            local = False
+        if local:
+            import jsongrammar
+            g = jsongrammar.to_gbnf(schema)
+            if g:
+                return {"grammar": g}
+    return {"response_format": {"type": "json_schema", "json_schema": {"name": "result", "schema": schema}}}
+
+
 def _complete_json(base_url, model, messages, schema, max_tokens, api_key, timeout, think=0, no_cache=False, temperature=0.1):
     """temperature: 0.1 for decisions; a creative step (the 3D scene's story) asks for more (the same story every time at 0.1)."""
     if STOP and not think:  # streamed, so Stop can drop it at once (see STOP)
         result = None
         for kind, value in _stream_chat(base_url, model, messages, temperature=temperature, max_tokens=max_tokens, api_key=api_key,
                                         timeout=timeout, should_stop=STOP, no_cache=no_cache,
-                                        response_format={"type": "json_schema", "json_schema": {"name": "result", "schema": schema}}):
+                                        **json_constraint(base_url, schema)):
             if kind == "done":
                 result = value
         if not result or result.get("stopped"):
@@ -83,7 +105,7 @@ def _complete_json(base_url, model, messages, schema, max_tokens, api_key, timeo
         except ValueError:
             raise LLMError(f"Model did not return valid JSON: {text[:200]}")
     body = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens + think,
-            "response_format": {"type": "json_schema", "json_schema": {"name": "result", "schema": schema}}}
+            **json_constraint(base_url, schema, think)}
     if no_cache:
         body["cache_prompt"] = False
     if think:  # thinking for this one request, cut at `think` tokens (the server runs with it off): without a
@@ -143,8 +165,7 @@ def stream_json(base_url, model, messages, schema, max_tokens=700, api_key=None,
     result = None
     for kind, value in stream_chat(base_url, model, messages, temperature=0.1, max_tokens=max_tokens,
                                    api_key=api_key, timeout=900, should_stop=should_stop,
-                                   response_format={"type": "json_schema",
-                                                    "json_schema": {"name": "result", "schema": schema}}):
+                                   **json_constraint(base_url, schema)):
         if kind == "text" and on_text:
             on_text(value)
         elif kind == "done":

@@ -34,6 +34,7 @@ import safety
 import sections as secrules
 import web
 import designref
+import domnode
 import pagebuild
 import photos
 import sitedit
@@ -1218,7 +1219,8 @@ sections = [{"n": the section's number, "block": its design}], why = one short l
         asked_shape = pagebuild.shape_of(asked)
         for n, s in enumerate(secs):
             role = s.get("_role") or ROLE_OF_PART.get(s.get("part"), "")
-            if not role or role == "hero" or s.get("part") not in self.BLOCK_PARTS or (s.get("_shape") and s["_shape"] == asked_shape):
+            if not role or role == "hero" or s.get("part") not in self.BLOCK_PARTS or (s.get("_shape") and s["_shape"] == asked_shape) \
+                    or s.get("_asked_part"):
                 continue
             # the 4B's role first; when no design of it fits this content (a restaurant's "Location & Hours" cards given
             # "action", its "Browse Categories" with no photos given "showcase": both fell back to plain icon cards),
@@ -1351,7 +1353,9 @@ sections = [{"n": the section's number, "block": its design}], why = one short l
                     for s in spec.get("sections") or [] if isinstance(s, dict)]
             # (the flow's key roles here too: a normal dental page's review kept its sections, and only the other path
             # put back its reviews and its address, 2026-11-16)
-            return dict(spec, sections=self._keep_key_roles(kept, emit), roles=True)
+            kept = self._landing_asks(asked, spec, self._keep_key_roles(kept, emit), emit, model)
+            return dict(spec, sections=kept, roles=True, **({"libraries": self._asked_libraries} if getattr(self, "_asked_libraries", None) else {}),
+                        **({"styles": self._asked_styles} if getattr(self, "_asked_styles", None) else {}))
         ends = [r for r in rows if r["part"] in ("form", "cta")]
         rows = [r for r in rows if r["part"] not in ("form", "cta")][:7] + ends[:1]  # (the call to act closes it)
         journey = " ".join(str(raw.get("journey") or "").split())
@@ -1359,8 +1363,273 @@ sections = [{"n": the section's number, "block": its design}], why = one short l
               "text": "🧐 " + (f"{journey[:220]} " if journey else "") + "→ " + ", ".join(r["name"] for r in rows)})
         for r in rows:  # (a section the 4B gave no role: its part's usual role)
             r.setdefault("role", ROLE_OF_PART.get(r["part"], ""))
-        rows = self._keep_key_roles(rows, emit)
-        return dict(spec, sections=rows, roles=True)
+        rows = self._landing_asks(asked, spec, self._keep_key_roles(rows, emit), emit, model)
+        out = dict(spec, sections=rows, roles=True)
+        if getattr(self, "_asked_libraries", None):
+            out["libraries"] = self._asked_libraries
+        if getattr(self, "_asked_styles", None):
+            out["styles"] = self._asked_styles
+        return out
+
+    LANDING_ASKS_PROMPT = """A landing page is built from its kind's flow (its sections below, each with the part that
+draws it) AND from what the user asked for. The user's asks come FIRST: every one of them must be on the page.
+For EACH thing the user asked for (the list below, in the user's words), choose its place:
+- a listed section's name: that section shows the same thing; it is then named in the user's words. Only when it
+  really shows it;
+- "NEW section": nothing listed shows it: part = the part that draws it, role = its job in the page's flow, name = the
+  user's words for it;
+- "inside <name>": a control or a small piece INSIDE that section (a button, a search box, a popup form);
+- "FRAME": ONLY the top menu, the big heading at the top (the hero), the footer: M42 draws them on every page.
+part: the part that draws the thing AS THE USER DESCRIBES IT (their "bar chart": bar_chart; their "photo
+gallery": gallery; their "reviews": reviews), for a listed section too; M42 compares it with the section's own part.
+And libraries = the JavaScript or CSS libraries / frameworks the user's words name to use (Chart.js, AOS, Swiper...),
+each with its npm package name; [] when none is named. Plain / vanilla JavaScript, plain CSS or HTML is no library.
+"""
+
+    PART_PROMPT = """M42 draws each part of a web page with one of its parts (listed). The user asked for ONE thing on
+their page (below, with how they describe it). Answer part = the part that draws it the way the user describes it:
+their "bar chart of sales" is bar_chart; their "photo gallery" is gallery; "reviews" is reviews. Only that one thing."""
+
+    LOOKS_ASK_PROMPT = """Read a request for a web page. Does it ask for a LOOK or a METHOD for the page (a visual style,
+an effect, a way the page behaves) that is not a section of content, not a JavaScript / CSS library named, and not
+code the user pasted? styles = each one, in the request's own words; [] when it asks for none."""
+
+    def _asked_part(self, item, base, model, key, emit):
+        """One ask's part, in its own small call (one question: the 4B answered it right alone; with seven asks and six
+        fields in one call it called a "Chart.js bar chart" a stats row, 2026-11-17). "" when not reached."""
+        parts = [p_ for p_ in webkit.PARTS if p_ != "custom"]
+        try:
+            raw, timings = llm.complete_json(base, model, [
+                {"role": "system", "content": self.PART_PROMPT + "\nThe parts: " + ", ".join(parts)},
+                {"role": "user", "content": f'The user asked for: {item.get("name")}: {item.get("shows") or ""}'}],
+                {"type": "object", "properties": {"part": {"type": "string", "enum": parts}}, "required": ["part"]},
+                max_tokens=20, api_key=key)
+            self._emit_stats(emit, "your asks", timings)
+            return raw.get("part") or ""
+        except (llm.LLMError, ValueError, OSError):
+            return ""
+
+    def _asked_styles_of(self, asked, base, model, key, emit):
+        """The looks / methods the request names (glassmorphism...), in their own small call; only ones whose words are
+        in the request (the 4B copied a prompt's examples once)."""
+        try:
+            raw, timings = llm.complete_json(base, model, [
+                {"role": "system", "content": self.LOOKS_ASK_PROMPT},
+                {"role": "user", "content": f"The request: {asked[:800]}"}],
+                {"type": "object", "properties": {"styles": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 80}}},
+                 "required": ["styles"]}, max_tokens=120, api_key=key)
+            self._emit_stats(emit, "your looks", timings)
+        except (llm.LLMError, ValueError, OSError):
+            return []
+        words_ = set(re.findall(r"[a-z]{4,}", asked.lower()))
+        return [" ".join(str(x).split())[:80] for x in raw.get("styles") or []
+                if str(x).strip() and not re.search(r"[{};]", str(x)) and set(re.findall(r"[a-z]{4,}", str(x).lower())) & words_][:4]
+
+    @staticmethod
+    def _plain_name(name):
+        """A section's name without the listing's own format echoed back by the 4B ("menu [cards] Glassmorphism
+        cards": the page then said "Menu Highlights" was missing, 2026-11-17)."""
+        return " ".join(re.split(r"\s*[\[:]", str(name or ""), maxsplit=1)[0].split())[:40] or " ".join(str(name or "").split())[:40]
+
+    LOOKS_PROMPT = """You write CSS for the looks the user asked for on their web page (glassmorphism cards, a
+gradient background, rounded buttons...). You see a map of the page (each line one block: [number] <tag#id.classes>
+"its words"), the page's colour variables, and the looks asked. Write CSS rules that give the parts the user means
+that look: selectors made of the classes, ids and tags in the map (a section's cards: its card class); the page's
+colour variables for colours (var(--m42-accent)...); a look made of several properties gets them all (glassmorphism:
+a see-through background with rgba, backdrop-filter blur, a light border, a soft shadow). Change the look only:
+keep display, position, width and height as they are. css: the rules; why: a few words."""
+
+    CLASS_PROMPT = """The user pasted CSS for their page; ONE of its classes is not on any element yet. Choose the
+blocks of the page that class is for: their numbers from the map (each line one block: [number] <tag#id.classes>
+"its words"). Read the class's name and its rule: a class named for prices goes on the blocks whose words are prices
+(₹299, $5); for titles, on the titles. ids = those numbers; [] when no block fits."""
+
+    def _asked_looks(self, page, spec, asked, emit, model=None):
+        """🎨 The looks and the CSS the user asked for, on the built page (the user, 2026-11-17: "what the user asks is
+        primary"): (1) a class their pasted CSS styles that no element has: the 4B picks the blocks it is for, from the
+        page's map (domnode), and they get it; (2) each look they asked for (glassmorphism...): the 4B writes its CSS
+        from the map's own classes, put after the kit's CSS. A real build: AOS, a chart, glass cards and .menu-price
+        asked; none of the glass or the class reached the page. Returns the page."""
+        base, key = llamacpp.base_url_for(self.config), self.config.get("api_key") or None
+        model = model or self.active_model()
+        nodes = domnode.index(page)
+        roots = domnode.body_nodes(nodes)
+        mp = domnode.skeleton(nodes, roots, lines=110)
+        ids = sorted({int(m) for m in re.findall(r"^\s*\[(\d+)\]", mp, re.M)})
+        ucss, _ujs = webkit.user_code(asked)
+        have = {c for v in re.findall(r'\bclass="([^"]*)"', page) for c in v.split()}
+        missing = [c for c in dict.fromkeys(re.findall(r"\.(-?[A-Za-z_][\w-]*)", re.sub(r"\{[^}]*\}", "{}", ucss or "")))
+                   if c not in have][:6]
+        for cls in (missing if ids else []):  # one class, one small question (its own rule shown with it)
+            rule = " ".join(m_.group(0) for m_ in re.finditer(r"[^{}]*\." + re.escape(cls) + r"\b[^{}]*\{[^}]*\}", ucss))[:400]
+            try:
+                raw, timings = llm.complete_json(base, model, [
+                    {"role": "system", "content": self.CLASS_PROMPT},
+                    {"role": "user", "content": f"The class: .{cls}\nIts rule: {rule.strip()}\nThe map:\n{mp}"}],
+                    {"type": "object", "properties": {"ids": {"type": "array", "maxItems": 12, "items": {
+                        "type": "string", "enum": [str(i) for i in ids]}}}, "required": ["ids"]}, max_tokens=120, api_key=key)
+                self._emit_stats(emit, "your css classes", timings)
+            except (llm.LLMError, ValueError, OSError):
+                continue
+            got = [int(i) for i in raw.get("ids") or [] if str(i).isdigit() and int(i) in nodes]
+            if got:
+                spec.setdefault("looks", {}).setdefault("classes", []).extend(
+                    {"class": cls, "tag": nodes[i]["tag"], "words": domnode.all_words(nodes, i, 80)} for i in got)
+                emit({"type": "note", "message": f'🎨 Your CSS class .{cls} put on: '
+                      + ", ".join(f'<{nodes[i]["tag"]}> "{domnode.all_words(nodes, i, 30)[:30]}"' for i in got[:4])})
+        looks = [str(x) for x in (spec or {}).get("styles") or [] if str(x).strip()][:4]
+        if looks and ids:
+            colours = sorted(set(re.findall(r"(--m42-[\w-]+)\s*:", page)))[:24]
+            try:
+                raw, timings = llm.complete_json(base, model, [
+                    {"role": "system", "content": self.LOOKS_PROMPT},
+                    {"role": "user", "content": f"The looks asked: {'; '.join(looks)}\nThe request: {asked[:400]}\n"
+                                                f"The page's colour variables: {', '.join(colours) or 'none'}\nThe map:\n{mp}"}],
+                    {"type": "object", "properties": {"css": {"type": "string", "maxLength": 3000},
+                                                      "why": {"type": "string", "maxLength": 160}}, "required": ["css", "why"]},
+                    max_tokens=900, api_key=key)
+                self._emit_stats(emit, "your looks", timings)
+                css = str(raw.get("css") or "").strip()
+                css = re.sub(r"^```\w*\s*|\s*```$", "", css)
+                sels = {s_ for s_ in re.findall(r"[.#]([A-Za-z_][\w-]*)", re.sub(r"\{[^}]*\}", "{}", css))}
+                known = have | {c for v in re.findall(r'\bclass="([^"]*)"', page) for c in v.split()} | set(re.findall(r'\bid="([^"]+)"', page))
+                ok = css and css.count("{") == css.count("}") > 0 and "@import" not in css and "url(http" not in css \
+                    and (not sels or sels & known) and "</" not in css
+                if ok:
+                    spec.setdefault("looks", {})["css"] = css
+                    emit({"type": "note", "message": f"🎨 The looks you asked for ({', '.join(looks)}): {raw.get('why') or 'added'}"})
+                else:
+                    emit({"type": "note", "message": f"🎨 The looks you asked for ({', '.join(looks)}) could not be written for this page: "
+                                                     "ask for them as a change"})
+            except (llm.LLMError, ValueError, OSError):
+                pass
+        return self.apply_looks(page, spec)
+
+    @staticmethod
+    def apply_looks(page, spec):
+        """The looks decided for the page (spec["looks"]: their CSS, the classes and the blocks they go on, found by
+        their tag and words), put on a drawing of it: every drawing gets them (a redraw after the build wiped them)."""
+        lk = (spec or {}).get("looks") or {}
+        if lk.get("classes"):
+            nodes = domnode.index(page)
+            for c in lk["classes"]:
+                i = domnode.find_like(nodes, c.get("tag"), c.get("words"))
+                if i:
+                    page = domnode.add_class(page, nodes, [i], c["class"])
+                    nodes = domnode.index(page)
+        if lk.get("css") and 'data-m42-asked="looks"' not in page and "</head>" in page:
+            page = page.replace("</head>", f'<style data-m42-asked="looks">\n{lk["css"]}\n</style>\n</head>', 1)
+        return page
+
+    def _landing_asks(self, asked, spec, rows, emit, model):
+        """🧩 A landing page's sections with the user's asks first (the user, 2026-11-17: "what the user asks is primary,
+        the flow's sections secondary; the JS / CSS they name, used"): each spec item (what they asked for) placed by the
+        4B, chosen from the sections, NEW, inside one, or the frame; a new one goes before the closing action; the
+        libraries their words name are kept. Returns the rows."""
+        items = [it for it in spec.get("items") or [] if isinstance(it, dict) and it.get("name")][:14]
+        self._asked_libraries, self._asked_styles = [], []
+        for r in rows:
+            r["name"] = self._plain_name(r.get("name"))
+        if not items or not rows:
+            return rows
+        key_ = lambda t: re.sub(r"[^a-z0-9]+", "", str(t or "").lower())
+        names = [str(r["name"]) for r in rows]
+        places = names + ["NEW section", "FRAME"] + [f"inside {n}" for n in dict.fromkeys(names + [it["name"] for it in items])]
+        parts = [p_ for p_ in webkit.PARTS if p_ not in ("custom",)]
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
+                {"role": "system", "content": self.LANDING_ASKS_PROMPT},
+                {"role": "user", "content": f"The request: {asked[:700]}" + chr(10) + "What the user asked for:" + chr(10)
+                                            + chr(10).join(f"- {it['name']}: {it.get('shows') or ''}" for it in items) + chr(10)
+                                            + "The page's sections:" + chr(10)
+                                            + chr(10).join(f"- {r['name']} [{r['part']}]: {r.get('what') or ''}" for r in rows)}],
+                {"type": "object", "properties": {
+                    "asks": {"type": "array", "maxItems": 14, "items": {"type": "object", "properties": {
+                        "item": {"type": "string", "enum": [it["name"] for it in items]},
+                        "place": {"type": "string", "enum": places},
+                        "part": {"type": "string", "enum": parts},
+                        "role": {"type": "string", "enum": [""] + list(flows.ROLES)},
+                        "name": {"type": "string", "maxLength": 40}, "what": {"type": "string", "maxLength": 160}},
+                        "required": ["item", "place", "part", "role", "name", "what"]}},
+                    "libraries": {"type": "array", "maxItems": 4, "items": {"type": "object", "properties": {
+                        "name": {"type": "string", "maxLength": 30}, "npm": {"type": "string", "maxLength": 40},
+                        "kind": {"type": "string", "enum": ["js", "css"]}}, "required": ["name", "npm", "kind"]}}},
+                    "required": ["asks", "libraries"]},
+                max_tokens=900, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "your asks", timings)
+        except (llm.LLMError, ValueError, OSError):
+            return rows
+        by = {key_(r["name"]): r for r in rows}
+        base_, mdl_, k_ = llamacpp.base_url_for(self.config), model or self.active_model(), self.config.get("api_key") or None
+        items_by = {it["name"]: it for it in items}
+        said_ = set(re.findall(r"[a-z]{4,}", asked.lower())) - self.GENERIC_ASK
+        for a in raw.get("asks") or []:  # 🧩 what draws each ask the user placed in a section: its own small question
+            # (only a thing the request's own words name: "Sales Chart" yes; a "Why Us" the spec added, no: its part
+            # is the flow's, 2026-11-17)
+            if isinstance(a, dict) and key_(a.get("place")) in by and a.get("item") in items_by and not self.stop_event.is_set():
+                if set(re.findall(r"[a-z]{4,}", str(a["item"]).lower())) & said_:
+                    a["part"] = self._asked_part(items_by[a["item"]], base_, mdl_, k_, emit) or a.get("part")
+                    a["_named"] = True
+                else:
+                    a["part"] = by[key_(a.get("place"))].get("part")
+        new_rows, inside, seen = [], {}, []
+        # (one part given to every listed section is no reading of the asks: "hbars" for all seven, the whole page
+        # became bars, 2026-11-17): a part change is kept only when the 4B told the sections apart
+        moved = [str(a.get("part")) for a in raw.get("asks") or [] if isinstance(a, dict) and key_(a.get("place")) in by
+                 and a.get("part") not in ("same", "", None) and a.get("part") != by[key_(a.get("place"))].get("part")]
+        mixed = not (len(moved) >= 3 and len(set(moved)) == 1)  # (the same part for all: no reading)
+        for a in raw.get("asks") or []:
+            if not isinstance(a, dict):
+                continue
+            place = str(a.get("place") or "")
+            nm = " ".join(str(a.get("name") or a.get("item") or "").split())[:40]
+            if place == "FRAME":
+                seen.append(f'{a.get("item")} → frame')
+            elif place == "NEW section" and a.get("part") in parts and nm and key_(nm) not in by:
+                x = {"name": self._plain_name(nm), "what": str(a.get("what") or a.get("item") or "")[:200], "part": a["part"], "n": 3,
+                     "asked_part": True,
+                     **({"role": a["role"]} if a.get("role") else {"role": ROLE_OF_PART.get(a["part"], "")})}
+                new_rows.append(x)
+                by[key_(nm)] = by[key_(a.get("item"))] = x
+                seen.append(f'{a.get("item")} → new [{a["part"]}]')
+            elif place.startswith("inside "):
+                inside.setdefault(key_(place[7:]), []).append(" ".join(str(a.get("what") or a.get("item") or "").split())[:140])
+                seen.append(f'{a.get("item")} → {place}')
+            elif key_(place) in by:
+                t = by[key_(place)]
+                t["what"] = f'{t.get("what") or ""}; {a.get("what") or a.get("item")}'[:240]
+                if a.get("_named") and a.get("part") == t.get("part"):
+                    t["asked_part"] = True  # (the user's own "photo gallery": no premium design in its place, 2026-11-17)
+                if mixed and a.get("part") in parts and a["part"] != t.get("part"):  # (what draws the user's ask: theirs first)
+                    seen.append(f'{t.get("name")} drawn as {a["part"]}')
+                    t["part"] = a["part"]
+                    t["asked_part"] = True
+                if nm:
+                    t["name"] = self._plain_name(nm)
+                by[key_(a.get("item"))] = t
+                seen.append(f'{a.get("item")} → {place}')
+        ends = [r for r in rows if r["part"] in ("form", "cta")]
+        body = [r for r in rows if r not in ends]
+        rows = body + new_rows + ends  # (a new ask before the call to act that closes the page)
+        for k, said in inside.items():
+            t = by.get(k)
+            if t:
+                t["what"] = (f'{t.get("what") or ""}; with ' + "; ".join(said))[:300]
+        req_ = key_(asked)  # (a library only when the user's words name it)
+        self._asked_libraries = [dict(l, npm=("/".join(str(l["npm"]).split("/")[:2]) if str(l["npm"]).startswith("@")
+                                              else str(l["npm"]).split("/")[0]).strip().lower())
+                                 for l in raw.get("libraries") or [] if isinstance(l, dict) and l.get("npm")
+                                 and key_(l.get("name")) and key_(l.get("name")) in req_][:4]
+        taken_ = {w for x in [it["name"] for it in items] + [l["name"] for l in self._asked_libraries]
+                  for w in re.findall(r"[a-z]{3,}", str(x).lower())}  # (a library or a section asked is no look: "Chart.js
+        # bar chart", "photo gallery" came back as looks too, 2026-11-17)
+        self._asked_styles = [x for x in self._asked_styles_of(asked, base_, mdl_, k_, emit)  # (their own small question)
+                              if not set(re.findall(r"[a-z]{3,}", x.lower())) & taken_]
+        if seen or self._asked_styles:
+            emit({"type": "note", "message": "🧩 Your asks: " + "; ".join(seen)
+                  + (f" · libraries you named: {', '.join(l['name'] for l in self._asked_libraries)}" if self._asked_libraries else "")
+                  + (f" · looks you asked for: {', '.join(self._asked_styles)}" if self._asked_styles else "")})
+        return rows
 
     # the roles a visitor of this kind of business cannot do without, when its flow has them: what others say, where it
     # is, and the step it leads to (a dental clinic's review left out its patient reviews and its address, and its
@@ -1556,6 +1825,31 @@ Answer {"dashboard": true or false, "work": the thinking in 1-3 sentences, "main
     # one control, not a section of its own: a print button, a status light (they belong in the bill / the top bar)
     CONTROL_RX = re.compile(r"\b(button|badge|indicator|status light|online|offline|toggle|switch|print receipt|print)\b", re.I)
 
+    # 🧩 what the user asked, first (the user, 2026-11-17: "what the user asks is primary; our defaults only where they
+    # asked nothing; the flow's skeleton PLUS their skeleton; the JS / CSS they name, used"). The school admin run:
+    # "Student table with search and an Add Student modal, fee management, a Chart.js attendance graph" became a timetable
+    # screen with one fee table: the old extras step allowed 2 extras, refused a second table and any "button" (word lists)
+    ASKED_PROMPT = """An app screen is built from its kind's rule set (its sections below, each with the part that draws
+it) AND from what the user asked for. The user's asks come FIRST: every one of them must be on the screen.
+For EACH thing the user asked for (the list below, in the user's words), choose its place:
+- a listed section's name: that section shows the same thing (the same records, the same chart); it is then named in
+  the user's words. Only when it really shows it: a fee table does not show students;
+- "NEW section": nothing listed shows it: part = the part that draws it, name = the user's words for it. Tables,
+  charts, stats and lists the user asked for are sections, never the frame;
+- "inside <name>": a control or a popup INSIDE that section or ask (an "Add Student" button with its form popup:
+  inside the students' table; a search box: inside its list);
+- "FRAME": ONLY the sidebar menu, the top bar, the page header, a dark / light switch: M42 draws them on every screen.
+Then main = the name of the section that is the user's main work on this screen (one the user asked for, when they asked
+for sections). And libraries = the JavaScript or CSS libraries / frameworks the user's words name to use (Chart.js,
+DataTables, AOS, Tailwind...), each with its npm package name; [] when none is named. Plain / vanilla JavaScript, plain
+CSS or HTML is no library."""
+
+    # how wide a part sits in a row of 12 (the rows are packed from these: data, one number per part)
+    TOP_PARTS = ("kpi_tiles", "stats")  # (the numbers of the day sit on top of an app screen)
+    SPANS = {"kpi_tiles": 12, "stats": 12, "data_table": 12, "table": 12, "week_schedule": 8, "calendar": 8,
+             "line_chart": 8, "bar_chart": 8, "area_chart": 8, "invoice": 5, "donut": 4, "agenda": 4, "progress_list": 4,
+             "list_thumbs": 4, "alerts": 4, "form": 4, "modal": 4, "image_cards": 8, "category_chips": 12}
+
     EXTRAS_PROMPT = """An app screen's sections are fixed by its kind's rule set (listed below, each with the part that
 draws it). Read the user's request and what they asked to see. Name ONLY what the user's own words ask for that no
 section of the screen shows yet: 0, 1 or 2 extra sections, each with the part that draws it (a share of a whole: donut;
@@ -1595,52 +1889,131 @@ requests need none: answer {"extras": []}."""
         missing = [w for w in dict.fromkeys(re.findall(r"[a-z][a-z']{3,}", asked.lower()))
                    if w not in self.GENERIC_ASK and w not in shown and w.rstrip("s") not in shown and w[:5] not in shown]
         parts = [p for p in pagebuild.PARTS if p in widgets.WIDGETS or p in ("form", "table")]
-        extras = []
+        extras, asked_names, inside = [], set(), {}
+        self._asked_libraries = []  # (this build's own: the agent outlives a build)
+        items = [it for it in spec.get("items") or [] if isinstance(it, dict) and it.get("name")][:14]
+        # the places it may choose (no name to type: it typed none right and put every ask in the frame, 2026-11-17)
+        ask_parts = [p_ for p_ in parts if p_ != "table"]  # (a records table the user asked for searches, adds, pages:
+        # data_table draws those; the plain table drew none of "a student table with search and an Add Student modal")
+        places = [s_["name"] for s_ in secs] + ["NEW section", "FRAME"] + [f"inside {n}" for n in
+                                                                           dict.fromkeys([s_["name"] for s_ in secs] + [it["name"] for it in items])]
         try:
             raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
-                {"role": "system", "content": self.EXTRAS_PROMPT},
-                {"role": "user", "content": f"The request: {asked[:300]}" + chr(10) + f"What the user asked to see:" + chr(10) + asks
-                                            + chr(10) + f"The screen ({sk['label']}, for {sk['users']}):" + chr(10) + listing
-                                            + (chr(10) + "Words of the request no section shows yet (an extra only for one that names a "
-                                               "thing to see or do on this screen; a place, a business type or a filler word is none): "
-                                               + ", ".join(missing[:8]) if missing else chr(10) + "Every word of the request is shown already: no extras.")}],
-                {"type": "object", "properties": {"extras": {"type": "array", "maxItems": 2, "items": {"type": "object", "properties": {
-                    "words": {"type": "string", "maxLength": 60}, "name": {"type": "string", "maxLength": 40},
-                    "what": {"type": "string", "maxLength": 160}, "part": {"type": "string", "enum": parts}},
-                    "required": ["words", "name", "what", "part"]}}}, "required": ["extras"]},
-                max_tokens=220, api_key=self.config.get("api_key") or None)
-            self._emit_stats(emit, "screen extras", timings)
-            for x in raw.get("extras") or []:
-                said = self._asked_for(x.get("words"), asked, secs)
-                if not said:  # (the skeleton check, 2026-11-15: a "form" or "alerts" no one asked for on 16 of 18 screens)
+                {"role": "system", "content": self.ASKED_PROMPT},
+                {"role": "user", "content": f"The request: {asked[:700]}" + chr(10) + "What the user asked for:" + chr(10)
+                                            + chr(10).join(f"- {it['name']}: {it.get('shows') or ''}" for it in items)
+                                            + chr(10) + f"The screen's sections ({sk['label']}, for {sk['users']}):" + chr(10) + listing}],
+                {"type": "object", "properties": {
+                    "asks": {"type": "array", "maxItems": 14, "items": {"type": "object", "properties": {
+                        "item": {"type": "string", "enum": [it["name"] for it in items] or ["-"]},
+                        "place": {"type": "string", "enum": places},
+                        "part": {"type": "string", "enum": [""] + ask_parts},
+                        "name": {"type": "string", "maxLength": 40}, "what": {"type": "string", "maxLength": 160}},
+                        "required": ["item", "place", "part", "name", "what"]}},
+                    "main": {"type": "string", "maxLength": 50},
+                    "libraries": {"type": "array", "maxItems": 4, "items": {"type": "object", "properties": {
+                        "name": {"type": "string", "maxLength": 30}, "npm": {"type": "string", "maxLength": 40},
+                        "kind": {"type": "string", "enum": ["js", "css"]}}, "required": ["name", "npm", "kind"]}}},
+                    "required": ["asks", "main", "libraries"]},
+                max_tokens=900, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "your asks", timings)
+            key_ = lambda t: re.sub(r"[^a-z0-9]+", "", str(t or "").lower())  # (names compared letters only: "Fee dues" = "fee-dues")
+            by_name = {key_(s_["name"]): s_ for s_ in secs}
+            seen_asks = []
+            for a in raw.get("asks") or []:
+                if not isinstance(a, dict):
                     continue
-                if (isinstance(x, dict) and x.get("part") in parts and x["part"] not in have and x.get("name")
-                        and not self.CONTROL_RX.search(f'{x.get("name")} {x.get("what") or ""}' if x["part"] not in ("form",) else "")):
-                    extras.append({"name": str(x["name"])[:40], "what": str(x.get("what") or "")[:160], "part": x["part"], "extra": True})
-                    have.add(x["part"])
+                place = str(a.get("place") or "")
+                how = "frame" if place == "FRAME" else "new" if place == "NEW section" else "inside" if place.startswith("inside ") else "section"
+                a["section"] = place[7:] if how == "inside" else place if how == "section" else ""
+                nm = " ".join(str(a.get("name") or a.get("item") or "").split())[:40]
+                target = by_name.get(key_(a.get("section")))
+                seen_asks.append(f'{a.get("item")} → ' + (f'inside {a["section"]}' if how == "inside" else a["section"] if how == "section"
+                                                         else f'new [{a.get("part")}]' if how == "new" else "frame"))
+                if how == "section" and target:  # the user's own words name it (theirs first)
+                    by_name[key_(a.get("item"))] = target
+                    target["what"] = f'{target["what"]}; {a.get("what") or a.get("item")}'[:240]
+                    if nm:
+                        by_name[key_(nm)] = target
+                        target["name"] = nm
+                    asked_names.add(id(target))
+                elif how == "new" and a.get("part") in parts and nm and key_(nm) not in by_name:
+                    x = {"name": nm, "what": str(a.get("what") or a.get("item") or "")[:200], "part": a["part"], "extra": True}
+                    extras.append(x)
+                    by_name[key_(nm)] = by_name[key_(a.get("item"))] = x
+                    asked_names.add(id(x))
+                elif how == "inside":  # a button with its popup, a search box: said to the section it is in
+                    inside.setdefault(key_(a.get("section")), []).append(
+                        " ".join(str(a.get("what") or a.get("item") or "").split())[:140])
+            for key, said in inside.items():
+                tgt = by_name.get(key)
+                if tgt:
+                    tgt["what"] = (f'{tgt["what"]}; with ' + "; ".join(said))[:300]
+                    asked_names.add(id(tgt))
+            if seen_asks:
+                emit({"type": "note", "message": "🧩 Your asks: " + "; ".join(seen_asks)})
+            main_name = key_(raw.get("main"))
+            if main_name in by_name and (id(by_name[main_name]) in asked_names or not asked_names):
+                for x in secs + extras:
+                    x.pop("main", None)
+                by_name[main_name]["main"] = True
+            # a library only when the user's words name it (the 4B added Tailwind and AOS to a request that named only
+            # Chart.js, 2026-11-17): its name is looked for in the request, letters only; npm: the package itself
+            req_ = key_(asked)
+            self._asked_libraries = [dict(l, npm=("/".join(str(l["npm"]).split("/")[:2]) if str(l["npm"]).startswith("@")
+                                                  else str(l["npm"]).split("/")[0]).strip().lower())
+                                     for l in raw.get("libraries") or [] if isinstance(l, dict) and l.get("npm")
+                                     and key_(l.get("name")) and key_(l.get("name")) in req_][:4]
         except (llm.LLMError, ValueError, OSError):
             if self.stop_event.is_set():
                 emit({"type": "progress", "id": rid, "done": True, "text": "🧐 Stopped (Stop was pressed)"})
                 return spec
-        rows = sk["layout"]
-        if extras:  # (the user's own extras: a row of their own under the skeleton, side by side)
-            rows = rows + [[{"span": 12 // len(extras), "parts": [x["part"]], "sticky": False} for x in extras]]
-            for c, x in enumerate(extras):
-                x["slot"] = [len(rows) - 1, c]
+        if extras:  # 🧩 the user's NEW sections: rows of their own; the skeleton's rows are kept as they are (a POS's
+            # products beside its sticky bill: repacked, each came out alone in a row, 2026-11-17)
+            rows = [list(r) for r in sk["layout"]]
+            new_rows, row, used = [], [], 0
+            for x in sorted(extras, key=lambda x: not x.get("main")):
+                span = 8 if x.get("main") and self.SPANS.get(x["part"], 6) < 12 else self.SPANS.get(x["part"], 6)
+                if used + span > 12 and row:
+                    row[-1]["span"] += 12 - used
+                    new_rows.append(row)
+                    row, used = [], 0
+                row.append({"span": span, "parts": [x["part"]], "sticky": False, "_x": x})
+                used += span
+            if row:
+                row[-1]["span"] += 12 - used
+                new_rows.append(row)
+            main_new = any(x.get("main") for x in extras)
+            main_row = next((s_["slot"][0] for s_ in secs if s_.get("main")), -1)
+            top_rows = [r for r, rw in enumerate(rows) if all(c["parts"][0] in self.TOP_PARTS for c in rw)]
+            at = (max(top_rows) + 1 if top_rows else 0) if main_new or main_row < 0 else main_row + 1
+            for x in secs:  # (the skeleton's sections below the new rows move down)
+                if x["slot"][0] >= at:
+                    x["slot"] = [x["slot"][0] + len(new_rows), x["slot"][1]]
+            for k, rw in enumerate(new_rows):
+                for c, col in enumerate(rw):
+                    col.pop("_x")["slot"] = [at + k, c]
+            rows = rows[:at] + new_rows + rows[at:]
+            sk = dict(sk, layout=rows)
+        rows = sk["layout"]  # (the user's new sections are in it already, each with its slot)
         all_secs = secs + extras
-        def col_text(col):
-            names = [next((s["name"] for s in all_secs if s["part"] == p), p) for p in col["parts"]]
-            star = ["★ " + n if any(s.get("main") and s["part"] == p for s in all_secs) else n for n, p in zip(names, col["parts"])]
+        def col_text(col, r, c):  # (by its place: two data tables, a students' and a fees', showed one name twice)
+            here = next((s for s in all_secs if s.get("slot") == [r, c]), None)
+            names = [here["name"]] if here else [next((s["name"] for s in all_secs if s["part"] == p), p) for p in col["parts"]]
+            star = ["★ " + n if (here or {}).get("main") else n for n in names]
             return f"[{col['span']}{' sticky' if col['sticky'] else ''}: {' + '.join(star)}]"
         emit({"type": "note", "message": f"🦴 Skeleton ({sk['label']}, for {sk['users']}): "
-              + "; ".join(f"row {i + 1}: " + " ".join(col_text(c) for c in row) for i, row in enumerate(rows))
-              + (f" · added from your words: {', '.join(x['name'] for x in extras)}" if extras else "")})
+              + "; ".join(f"row {i + 1}: " + " ".join(col_text(c, i, j) for j, c in enumerate(row)) for i, row in enumerate(rows))
+              + (f" · your asks first: {', '.join(x['name'] for x in secs if x.get('extra') or 'slot' in x)}" if asked_names else "")
+              + (f" · libraries you named: {', '.join(l['name'] for l in getattr(self, '_asked_libraries', []))}"
+                 if getattr(self, "_asked_libraries", None) else "")})
         emit({"type": "progress", "id": rid, "done": True, "text": f"🧐 {sk['work'][:1].upper() + sk['work'][1:]} → "
               + ", ".join(("★ " if s.get("main") else "") + s["name"] for s in all_secs)})
         return dict(spec, sections=[{"name": s["name"], "what": s["what"], "part": s["part"], "slot": s["slot"],
                                      **({"main": True} if s.get("main") else {})} for s in all_secs],
                     hero="compact", app_flow=True, app_layout=rows, app_for=f"{sk['users']}: {sk['work']}",
-                    app_screens=getattr(self, "_app_screens", []))
+                    app_screens=getattr(self, "_app_screens", []),
+                    **({"libraries": self._asked_libraries} if getattr(self, "_asked_libraries", None) else {}))
 
     def _app_sections_fixed(self, secs, raw, emit):
         """🧐 The review's sections made whole (POS run 3, 2026-11-15): a section named with a part's word gets a real name
@@ -2325,6 +2698,7 @@ per part the message names], "why": one short sentence}."""
             new = re.sub(r"(<button\b[^>]*>)(.*?)</button>", label, new, flags=re.S | re.I)
             if new != page:
                 done.append("buttons with no words labelled")
+        kept_cls = []
         swap = {}  # each class the check named: its real name when the check gave one ("ml-3 (Bootstrap 5: ms-3)"), else none
         for p in probs:
             m = re.search(r"classes are in no loaded stylesheet[^:]*:\s*(.+?)(?:\.\s+Use the real|$)", p)
@@ -2334,8 +2708,26 @@ per part the message names], "why": one short sentence}."""
                 em = re.match(r"\s*([A-Za-z][\w-]*)\s*(?:\((.*)\))?", entry)
                 if not em:
                     continue
-                to = re.match(r"(?:Bootstrap 5:\s*|did you mean\s+)?([A-Za-z][\w-]*)\??$", (em.group(2) or "").strip())
-                swap[em.group(1)] = to.group(1) if to else ("bi-stars" if em.group(1).startswith("bi-") else "")  # (an icon: never a bare "bi")
+                hint = (em.group(2) or "").strip()
+                to = re.match(r"(?:Bootstrap 5:\s*|did you mean\s+)?([A-Za-z][\w-]*)\??$", hint)
+                cls_ = em.group(1)
+                # 🛡 never a class the page's own script reads (a coder's cart: its .m42-cart-sum renamed / taken out, its
+                # script then read null and threw, 2026-11-17), never a far guess (m42-cart-go "→ m42-chart": another
+                # thing's look); a Bootstrap 4 name or a plain typo is mended, any other class is left as it is (it draws
+                # nothing; taken out or renamed it can break the page)
+                in_script = bool(re.search(r"<script\b(?:(?!</script>).)*[.'\"\s#]" + re.escape(cls_) + r"\b", new, re.S | re.I))
+                if in_script:
+                    kept_cls.append(cls_)
+                elif to and (hint.startswith("Bootstrap 5") or difflib.SequenceMatcher(None, cls_, to.group(1)).ratio() >= 0.9):
+                    swap[cls_] = to.group(1)
+                elif cls_.startswith("bi-") and not in_script:
+                    swap[cls_] = "bi-stars"  # (an icon that does not exist draws an empty box: a real one; never a bare "bi")
+                else:
+                    kept_cls.append(cls_)
+        if kept_cls:
+            done.append("classes no stylesheet has, left as they are (they draw nothing; changing them could break the page"
+                        + (", its script reads some" if any(re.search(r"<script\b(?:(?!</script>).)*" + re.escape(c_) + r"\b", new, re.S | re.I) for c_ in kept_cls) else "")
+                        + "): " + ", ".join(kept_cls[:6]))
         if swap:
             def fix(m):
                 cls = " ".join(dict.fromkeys(swap.get(c, c) if c in swap else c for c in m.group(2).split()))
@@ -2343,10 +2735,25 @@ per part the message names], "why": one short sentence}."""
             before = new
             new = re.sub(r'(\sclass=)"([^"]*)"', fix, new)
             if new != before:
-                done.append("classes no stylesheet has: " + ", ".join(f"{k} → {v}" if v else f"{k} taken out" for k, v in swap.items())[:120])
+                done.append("classes no stylesheet has: " + ", ".join(f"{k} → {v}" for k, v in swap.items())[:120])
+        # 🎨 a text too faint: its colour computed from the colours measured, one CSS rule (no model, no wait)
+        rules = []
+        for c in (getattr(self, "_last_ux", None) or {}).get("contrast") or []:
+            got = webkit.contrast_fix(c)
+            if got and f"{got[0]} {{" not in new:
+                rules.append(f"{got[0]} {{ color: {got[1]} !important; }}")
+        fixed_texts = []
+        if rules:
+            block = '<style data-m42-fix="contrast">\n' + "\n".join(rules) + "\n</style>"
+            new = (re.sub(r'<style data-m42-fix="contrast">.*?</style>', lambda m: m.group(0)[:-8] + "\n".join(rules) + "\n</style>", new, count=1, flags=re.S)
+                   if 'data-m42-fix="contrast"' in new else re.sub(r"</head>", lambda m: block + "\n" + m.group(0), new, count=1, flags=re.I))
+            fixed_texts = [str(c.get("text") or "") for c in (self._last_ux or {}).get("contrast") or [] if webkit.contrast_fix(c)]
+            done.append(f"{len(rules)} faint text(s) given a readable colour, computed: " + ", ".join(f'"{t[:24]}"' for t in fixed_texts[:3]))
+            self._last_ux = dict(self._last_ux, contrast=[])
         if not done:
             return page, False
-        self._page_problems = [p for p in probs if not ("button has no label" in p.lower() or "classes are in no loaded stylesheet" in p)]
+        self._page_problems = [p for p in probs if not ("button has no label" in p.lower() or "classes are in no loaded stylesheet" in p
+                                                        or ("has contrast" in p and any(f'"{t}"' in p for t in fixed_texts)))]
         emit({"type": "note", "message": "✓ Fixed by M42 itself (no model, no wait): " + "; ".join(done)})
         diff, added, removed = _diff("index.html", page, new)
         eid = "edit_" + uuid.uuid4().hex[:8]
@@ -2377,6 +2784,25 @@ per part the message names], "why": one short sentence}."""
                 break
             t0 = time.time()
             numbered = "\n".join(f"{i:4d}| {line}" for i, line in enumerate(page.splitlines(), 1))
+            room = int(self.config.get("ctx_tokens", 16384)) - 2500  # (the answer's 1,500 and the prompt's own words)
+            if len(numbered) / 3.0 > room:
+                # 📏 a page too long for the model (an ERP of 11 parts: 19,394 tokens against 16,384, the fix failed with
+                # HTTP 400, 2026-11-17): only the lines the problems name, with 30 around each
+                rows = page.splitlines()
+                keys = {k for p_ in probs for k in re.findall(r'"([^"]{3,60})"|\b([a-z][\w-]*-[\w-]+)\b', p_) for k in k if k}
+                hits = sorted({i for i, r_ in enumerate(rows) if any(k in r_ for k in keys)})
+                keep = sorted({j for i in hits for j in range(max(0, i - 30), min(len(rows), i + 31))})
+                parts_, last = [], -2
+                for j in keep:
+                    if j != last + 1:
+                        parts_.append("     | ...")
+                    parts_.append(f"{j + 1:4d}| {rows[j]}")
+                    last = j
+                numbered = "\n".join(parts_)
+                if not keep or len(numbered) / 3.0 > room:
+                    emit({"type": "note", "message": "📏 The page is too long for the line fix and its problems name no lines "
+                                                     "it can show: left as it is (" + "; ".join(x[:70] for x in probs[:2]) + ")"})
+                    break
             msgs = [{"role": "system", "content": codeedit.EDIT_PROMPT},
                     {"role": "user", "content": f"index.html (the numbers are not part of the file):\n{numbered}\n\n"
                                                 "M42 ran the page in a browser and found these problems:\n"
@@ -2436,7 +2862,9 @@ per part the message names], "why": one short sentence}."""
             left, _ = self._chat_page_check(f"```html\n{page}\n```", emit, request)
             now = [p for p in self._page_problems if not self._needs_section(p)]
             sent_checks = [p for p in probs if not p.startswith("Add to the page's script")]
-            fixed = [p for p in sent_checks if p not in now]
+            same = lambda p: re.sub(r"\d+(?:\.\d+)?", "#", p)  # (numbers out: a contrast that changed 4.25 -> 3.63 is not fixed)
+            now_keys = {same(q) for q in now}
+            fixed = [p for p in sent_checks if same(p) not in now_keys]
             rules = [p for p in probs if p.startswith("Add to the page's script")]
             secs = time.time() - t0
             # ⏱ each round judged by what it fixed (the user, 2026-11-15: "4.5 minutes for a line fix must be right, or it
@@ -2526,9 +2954,13 @@ per part the message names], "why": one short sentence}."""
             emit({"type": "progress", "id": pid, "text": "🧱 Writing the page's content: every section, real names and prices"})
             try:
                 msgs = pagebuild.plan_messages(asked, spec, getattr(self, "_page_reference", ""))
+                names_ = pagebuild.bound_names(spec)
+                plan_schema = pagebuild.bound_schema(pagebuild.PLAN_SCHEMA_NO_ICONS, names_)
+                if names_:
+                    msgs[-1] = dict(msgs[-1], content=msgs[-1]["content"] + self._bound_words(names_))
                 try:  # (a normal dental page's 8 sections took 2,626 tokens with 2,600 allowed, 2026-11-16: room, and one
                     # more try with short items when it is cut mid-JSON, never the coder writing the page from words)
-                    raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model, msgs, pagebuild.PLAN_SCHEMA,
+                    raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model, msgs, plan_schema,
                                                      max_tokens=3800 if spec.get("recipe") or spec.get("ref_grid") else 3400,
                                                      api_key=self.config.get("api_key") or None)
                 except llm.LLMError as e1:
@@ -2536,19 +2968,20 @@ per part the message names], "why": one short sentence}."""
                         raise
                     emit({"type": "note", "message": "🧱 The page's content was cut off: asked again, shorter"})
                     msgs = msgs[:-1] + [dict(msgs[-1], content=str(msgs[-1]["content"]) + "\n\n(Keep every text short: one line each.)")]
-                    raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model, msgs, pagebuild.PLAN_SCHEMA,
+                    raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model, msgs, plan_schema,
                                                      max_tokens=4200, api_key=self.config.get("api_key") or None)
             except (llm.LLMError, ValueError, OSError) as e:
                 emit({"type": "progress", "id": pid, "done": True, "text": f"🧱 No page plan ({e}): the coder writes it"})
                 return False
             self._emit_stats(emit, "page plan", timings)
-            plan = pagebuild.clean(raw, spec)
+            raw, spec_b = self._bind_plan(raw, spec, names_, asked, emit, model)
+            plan = pagebuild.clean(raw, spec_b)
             if not plan["sections"]:
                 emit({"type": "progress", "id": pid, "done": True, "text": "🧱 No page plan: the coder writes it"})
                 return False
             if spec.get("only_part"):  # one part of the user's picture asked for: that part alone (the plan added a second)
                 plan["sections"] = plan["sections"][:1]
-            if not spec.get("only_part"):
+            if not spec.get("only_part") and not names_:
                 self._fill_missing(plan, spec, asked, emit, model)
             self._fill_thin(plan, spec, asked, emit, model)
             self._fix_app_data(plan, spec, asked, emit, model)  # 📐 each app part's data in the shape its widget draws
@@ -2617,6 +3050,8 @@ per part the message names], "why": one short sentence}."""
         ucss, ujs = webkit.user_code(asked)
         if ucss or ujs:
             page = webkit.inject_user_code(page, ucss, ujs)
+        if (ucss or spec.get("styles")) and not spec.get("looks"):
+            page = self._asked_looks(page, spec, asked, emit, model)
         self._spec_coverage(spec, page, emit)
         lk = theme["look"]
         answer = (f"🧱 Built by M42 from a page plan ({lk['theme']} · {lk['style']} · colours {lk['primary']} "
@@ -2625,6 +3060,7 @@ per part the message names], "why": one short sentence}."""
         self.asked_now, self.current_spec, self.recalled_skill = asked, spec, None
         self.last_code = {"lang": "html", "code": page}
         if self.workspace.roots:  # a project folder: the page is saved there, with the kit beside it (offline)
+            page = self._link_asked_libraries(page, self.workspace.roots[0][1], spec)
             self._save_plan_page(page, emit)
             site = sitedit.new_site(asked, spec.get("look"), None, [(plan, spec, "index.html")], single=True)
             self._keep_site(self.workspace.roots[0][1], self._drawn(self.workspace.roots[0][1], site))
@@ -2649,8 +3085,8 @@ per part the message names], "why": one short sentence}."""
         emit({"type": "done"})
         return True
 
-    REVIEW_LOOK_PROMPT = """You are a premium product designer looking at a screenshot (one part of a page, top to bottom)
-of a page just built for: {asked}
+    REVIEW_LOOK_PROMPT = """You are a premium product designer looking at screenshots of a page (its parts, top to bottom),
+a page just built for: {asked}
 Name only CLEAR problems a visitor would notice, the ones a premium designer would not ship: a big empty area, the
 same thing shown twice, a photo that is not about this business, text cut off or overlapping something, a card or a
 row out of line or broken, text too faint to read, a part of the page that does not fit what the page is for. Small
@@ -2851,24 +3287,25 @@ problem in a few words; fix = one plain instruction to fix it on the page. Nothi
             emit({"type": "progress", "id": vid, "done": True, "text": "👁 Could not take the page's picture: not looked at"})
             return
         self._check_scene_3d(before[0], vision, root, page_file, emit)  # 🎬 its 3D scene, if it has one
-        schema = {"type": "object", "properties": {"problems": {"type": "array", "maxItems": 3, "items": {"type": "object", "properties": {
+        schema = {"type": "object", "properties": {"problems": {"type": "array", "maxItems": 4, "items": {"type": "object", "properties": {
             "where": {"type": "string", "maxLength": 60}, "what": {"type": "string", "maxLength": 100},
             "fix": {"type": "string", "maxLength": 160}}, "required": ["where", "what", "fix"]}}}, "required": ["problems"]}
         found = []
-        for k, tile in enumerate(before):
-            if self.stop_event.is_set():
-                return
-            try:
-                raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), vision, [
-                    {"role": "system", "content": self.REVIEW_LOOK_PROMPT.replace("{asked}", asked[:240])
-                     + learn.recall_design("app" if webkit.app_asked(asked) else "landing", asked)},
-                    {"role": "user", "content": [{"type": "text", "text": f"Part {k + 1} of {len(before)} of the page."},
-                                                 {"type": "image_url", "image_url": {"url": self._jpeg_url(tile)}}]}],
-                    schema, max_tokens=360, api_key=self.config.get("api_key") or None)
-                self._emit_stats(emit, "page look", timings)
-            except (llm.LLMError, ValueError, OSError):
-                continue
+        # ⚡ the page's parts in ONE look, top to bottom (three looks, one a part, wrote ~500 tokens and took 76 s of a
+        # 13-minute build, 2026-11-16; the pictures are read the same, the problems are written once)
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), vision, [
+                {"role": "system", "content": self.REVIEW_LOOK_PROMPT.replace("{asked}", asked[:240])
+                 + learn.recall_design("app" if webkit.app_asked(asked) else "landing", asked)},
+                {"role": "user", "content": [{"type": "text", "text": f"The page, top to bottom, in {len(before)} parts:"}]
+                 + [{"type": "image_url", "image_url": {"url": self._jpeg_url(tile)}} for tile in before]}],
+                schema, max_tokens=480, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "page look", timings)
             found += [p for p in raw.get("problems") or [] if str(p.get("fix") or "").strip()]
+        except (llm.LLMError, ValueError, OSError):
+            pass
+        if self.stop_event.is_set():
+            return
         if not found:
             emit({"type": "progress", "id": vid, "done": True, "text": "👁 The finished page looks right: nothing clear to fix"})
             return
@@ -3531,6 +3968,57 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
                                          + (f" · drawing “{mo['doodle']}” where there is no photo" if mo.get("doodle") else "")})
         return dict(spec, motion=mo)
 
+    @staticmethod
+    def _bound_words(names):
+        return (f"\n\nWrite exactly {len(names)} sections, one for each section of the spec, in its order; each "
+                "section's \"for\" = the name of the spec section it is: " + ", ".join(f'"{n}"' for n in names) + ".")
+
+    def _bind_plan(self, raw, spec, names, asked, emit, model):
+        """🧩 The plan's sections in the spec's order, one per spec section, by their "for" (never by position); a spec
+        section the plan did not write is written alone, in its place (the user, 2026-11-17: "mixing one into another
+        does not look good"). Returns (the plan, the spec its sections match: a section that could not be written is
+        left out of both, so each section keeps its own part)."""
+        if not names:
+            return raw, spec
+        got = pagebuild.bind_sections(raw, names)
+        rows = [x for x in spec.get("sections") or [] if isinstance(x, dict)]
+        brand = ((raw or {}).get("brand") or {}).get("name", "")
+        for i, sec in enumerate(got):
+            if sec is None and i < len(rows) and not self.stop_event.is_set():
+                got[i] = self._one_section(rows[i], brand, asked, emit, model)
+        keep = [i for i, sec in enumerate(got) if sec is not None and i < len(rows)]
+        if len(keep) < len(names):
+            emit({"type": "note", "message": "🧱 Left out (not written): " + ", ".join(names[i] for i in range(len(names)) if i not in keep)})
+        return dict(raw or {}, sections=[got[i] for i in keep]), dict(spec, sections=[rows[i] for i in keep])
+
+    def _one_section(self, row, brand, asked, emit, model):
+        """One spec section the plan did not write, written alone (its raw plan section), or None."""
+        fid = "miss_" + uuid.uuid4().hex[:8]
+        emit({"type": "progress", "id": fid, "text": f"🧱 {row.get('name')}: not in the page plan, writing it"})
+        notes = widgets.NOTES.get(row.get("part"), "")
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
+                {"role": "system", "content": "You write ONE section of a web page as JSON {\"section\": {...}}: real, specific "
+                 "content for the user's site (names, texts, prices, never \"Item 1\"). Indian context unless the request says "
+                 "otherwise. A form: its fields and its button."},
+                {"role": "user", "content": f"The site: {asked[:400]}\nIts name: {brand}\n"
+                                            f"The section: {row.get('name')} [part {row.get('part')}]: {row.get('what', '')}"
+                                            + (f"\nWhat this part reads: {notes}" if notes else "")}],
+                {"type": "object", "properties": {"section": pagebuild.SECTION}, "required": ["section"]},
+                max_tokens=1000, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "missing section", timings)
+        except (llm.LLMError, ValueError, OSError) as e:
+            emit({"type": "progress", "id": fid, "done": True, "text": f"🧱 {row.get('name')}: left out ({e})"})
+            return None
+        sec = raw.get("section")
+        if not isinstance(sec, dict) or not (sec.get("items") or sec.get("fields") or sec.get("lead")):
+            emit({"type": "progress", "id": fid, "done": True, "text": f"🧱 {row.get('name')}: nothing usable"})
+            return None
+        sec["part"] = row.get("part") if row.get("part") in pagebuild.PART_NAMES else sec.get("part") or "cards"
+        sec.setdefault("title", row.get("name"))
+        emit({"type": "progress", "id": fid, "done": True, "text": f"🧱 {row.get('name')}: added"})
+        return sec
+
     def _fill_missing(self, plan, spec, asked, emit, model):
         """The spec's sections the plan left out (a bakery's spec had Specials, Menu, About and Newsletter; the plan
         wrote 2 of them and the page had no About, no newsletter form, 2026-11-11): the model writes each alone, in its
@@ -3564,6 +4052,17 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
                     schema, max_tokens=1000, api_key=key)
                 self._emit_stats(emit, "missing section", timings)
             except (llm.LLMError, ValueError, OSError) as e:
+                if row["part"] == "invoice" and not self.stop_event.is_set():  # 🧾 a bill is the main tool of its screen: never
+                    # left out; M42 makes it from the page's own priced products (a POS lost its bill, 2026-11-17)
+                    bill = {"part": "invoice", "title": row["name"], "eyebrow": "", "lead": "", "items": [], "button": "Pay"}
+                    self._repair_app_data(plan, bill, "invoice")
+                    if bill["items"]:
+                        one = pagebuild.clean(dict(plan, sections=[bill]), {"sections": [dict(row)], "recipe": spec.get("recipe")})["sections"]
+                        if one:
+                            plan["sections"].insert(min(k, len(plan["sections"])), one[0])
+                            emit({"type": "progress", "id": fid, "done": True,
+                                  "text": f"🧱 {row['name']}: made by M42 from the page's products ({len(bill['items'])} lines)"})
+                            continue
                 emit({"type": "progress", "id": fid, "done": True, "text": f"🧱 {row['name']}: left out ({e})"})
                 continue
             sec = pagebuild._no_tags(raw.get("section") or {})
@@ -3710,6 +4209,12 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             if self.stop_event.is_set():
                 break
             sec = plan["sections"][n]
+            key_ = lambda t: re.sub(r"[^a-z0-9]+", "", str(t or "").lower())
+            row = next((r for r in rows if isinstance(r, dict) and key_(r.get("name")) and key_(r.get("name")) == key_(sec.get("title"))),
+                       rows[n] if n < len(rows) and isinstance(rows[n], dict) else {})
+            # (its job on the screen, the spec's words: "Recent bills" rewritten from its widget alone came back as
+            # "Total Sales, Avg Bill Value, Pure Silk Saree": totals and products, no bills, 2026-11-17)
+            job = f'{row.get("name") or sec.get("title") or ""}: {row.get("what") or sec.get("lead") or ""}'.strip(": ")
             fid = "appdata_" + uuid.uuid4().hex[:8]
             emit({"type": "progress", "id": fid, "text": f"📐 {sec.get('title') or part}: {gap}: writing its data again"})
             schema = {"type": "object", "properties": {"labels": {"type": "array", "items": {"type": "string", "maxLength": 24}, "maxItems": 12},
@@ -3723,7 +4228,9 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
                      f"The widget {part} reads: {widgets.NOTES.get(part) or ''}\nIts premium rules: {screenparts.brief(part)}\nWhat was wrong: {gap}."
                      + (f"\nThe exact shape: {self.SHAPES[part]}" if part in self.SHAPES else "")},
                     {"role": "user", "content": f"The app: {asked[:300]}\nThe part: {sec.get('title') or ''} [{part}]\n"
-                                                f"Its data now: {json.dumps(sec.get('items') or [], ensure_ascii=False)[:900]}"}],
+                                                + (f"Its job on this screen: {job}. Each row / item is ONE of the things this job "
+                                                   "names (a bill, a patient, an order...), never a total or another part's things.\n" if job else "")
+                                                + f"Its data now: {json.dumps(sec.get('items') or [], ensure_ascii=False)[:900]}"}],
                     schema, max_tokens=1200, api_key=key)
                 self._emit_stats(emit, "part data", timings)
             except (llm.LLMError, ValueError, OSError) as e:
@@ -3902,9 +4409,13 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
                 f"{asked}\nThis page of the site: {name}: {purpose}. Write only this page's sections (below); "
                 f"the other pages ({others}) hold the rest.", pspec, reference)
             raw = None
+            names_ = pagebuild.bound_names(pspec)
+            if names_:
+                msgs[-1] = dict(msgs[-1], content=msgs[-1]["content"] + self._bound_words(names_))
             for tokens in ((3800 if pspec.get("recipe") else 3400 if pspec.get("ref_grid") else 2200), 3800):  # cut off mid-JSON (a real run lost its
                 try:                                                          # CRM page): once more with more room
-                    raw, timings = llm.complete_json(base, model, msgs, pagebuild.PLAN_SCHEMA, max_tokens=tokens, api_key=key)
+                    raw, timings = llm.complete_json(base, model, msgs, pagebuild.bound_schema(pagebuild.PLAN_SCHEMA, names_),
+                                                     max_tokens=tokens, api_key=key)
                     self._emit_stats(emit, f"page plan: {name}", timings)
                     break
                 except (llm.LLMError, ValueError, OSError) as e:
@@ -3914,7 +4425,8 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             if raw is None:
                 emit({"type": "progress", "id": pid, "done": True, "text": f"🧱 {name}: no plan ({err})"})
                 continue
-            plan = pagebuild.clean(raw, pspec)
+            raw, pspec_b = self._bind_plan(raw, pspec, names_, asked, emit, model)
+            plan = pagebuild.clean(raw, pspec_b)
             if not plan["sections"]:
                 emit({"type": "progress", "id": pid, "done": True, "text": f"🧱 {name}: no sections"})
                 continue
@@ -3922,7 +4434,8 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
                 plan["hero"]["title"] = name  # (every page of a real run was headed "Print Floor")
             if pspec.get("ref_grid"):
                 self._fill_counts(plan, pspec, asked, emit, model)
-            self._fill_missing(plan, pspec, asked, emit, model)
+            if not names_:
+                self._fill_missing(plan, pspec, asked, emit, model)
             self._fill_thin(plan, pspec, asked, emit, model)
             self._name_columns(plan, asked, emit, model)
             pspec = self._motion(plan, pspec, asked, emit, model)
@@ -3975,6 +4488,20 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             if theme_css:
                 self.workspace.write_file("css/theme.css", theme_css + "\n")
         self._keep_site(root, self._drawn(root, sitedit.new_site(asked, site_look, files, built)))
+        if webkit.user_code(asked)[0] or spec.get("styles"):
+            kept_ = sitedit.load(root)
+            for _plan, pspec_, f in built:
+                with contextlib.suppress(OSError):
+                    text_ = (root / f).read_text(encoding="utf-8")
+                    pspec_.setdefault("styles", spec.get("styles"))
+                    looked = self._asked_looks(text_, pspec_, asked, emit, model)
+                    if looked != text_:
+                        self.workspace.write_file(f, looked)
+                    pk = sitedit.page(kept_, f) if kept_ else None
+                    if pk and pspec_.get("looks"):
+                        pk["spec"]["looks"] = pspec_["looks"]
+            if kept_:
+                self._keep_site(root, kept_)
         for f in [w for w in written if w.endswith(".html")]:
             try:
                 rep = browser.check(root / f, clicks=True)
@@ -4028,6 +4555,7 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             credits = photos.add_to_plan(plan, asked, root, keys, emit, cache=getattr(self, "_photo_cache", None))
             credits = self._check_hero_photo(plan, asked, root, credits, emit)
             credits = self._check_item_photos(plan, asked, root, credits, emit)  # every card's photo looked at too
+            credits = self._photos_again(plan, asked, root, keys, credits, emit)  # the cards left without one: simpler words
             hero = plan.get("hero") or {}
             if hero and not hero.get("photo"):  # the hero's photo was not about the site: one of the page's own photos
                 # that passed the look (a wedding planner's hero was an empty circle, 2026-11-14), not an empty art
@@ -4041,6 +4569,50 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         note = photos.footer_note(credits) if credits else ""
         if note and note not in str(plan.get("footer") or ""):
             plan["footer"] = (str(plan.get("footer") or "") + " · " + note).strip(" ·")
+
+    PHOTO_AGAIN_PROMPT = """These cards of a web page found no stock photo that shows them (free photo sites, searched in
+English). For each, write SIMPLER, more common search words: the general kind of thing a photo site surely has, still
+the same thing ("Kanchipuram pure silk saree" -> "silk saree" or "saree"; "Cotton formal shirt" -> "white shirt";
+"Dhoti" -> "white dhoti cloth"), 1-3 words. Answer {"words": [{"id": ..., "q": ...}]}, one per card."""
+
+    def _photos_again(self, plan, asked, root, keys, credits, emit):
+        """📷 A second search for the cards the first left without a photo (2026-11-17: 5 of a textile POS's 8 products
+        showed an icon): the 4B gives simpler words for all of them in one call, M42 searches them, and each photo found
+        is looked at like the first ones. Returns the credits."""
+        left = [(n, k, it) for n, sec in enumerate(plan.get("sections") or []) if sec.get("part") in photos.PHOTO_PARTS
+                for k, it in enumerate(sec.get("items") or []) if isinstance(it, dict) and it.get("title") and not it.get("photo")][:8]
+        if not left or self.stop_event.is_set():
+            return credits
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), self.active_model(), [
+                {"role": "system", "content": self.PHOTO_AGAIN_PROMPT},
+                {"role": "user", "content": f"The site: {photos.subject(asked) or asked[:120]}\nThe cards:\n" + "\n".join(
+                    f'{i + 1}. {it.get("title")}: {str(it.get("text") or "")[:60]} (searched: {it.get("_q") or "-"})' for i, (_n, _k, it) in enumerate(left))}],
+                {"type": "object", "properties": {"words": {"type": "array", "maxItems": len(left), "items": {"type": "object", "properties": {
+                    "id": {"type": "integer", "minimum": 1, "maximum": len(left)}, "q": {"type": "string", "maxLength": 40}},
+                    "required": ["id", "q"]}}}, "required": ["words"]}, max_tokens=60 + 18 * len(left), api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "photo words again", timings)
+        except (llm.LLMError, ValueError, OSError):
+            return credits
+        said = {w.get("id"): " ".join(str(w.get("q") or "").split()) for w in raw.get("words") or [] if isinstance(w, dict)}
+        again = []
+        for i, (n, k, it) in enumerate(left, 1):
+            q = said.get(i)
+            if q and q.lower() != str(it.get("_q") or "").lower():
+                it["_q"] = q
+                again.append(it)
+        if not again:
+            return credits
+        sub = {"hero": {}, "sections": [{"part": "image_cards", "items": again}]}  # (the same item dicts: photos land in the plan)
+        try:
+            more = photos.add_to_plan(sub, asked, root, keys, emit)
+            more = self._check_item_photos(sub, asked, root, more, emit)
+        except (OSError, ValueError):
+            return credits
+        got = sum(1 for it in again if it.get("photo"))
+        emit({"type": "progress", "id": "photos2_" + uuid.uuid4().hex[:6], "done": True,
+              "text": f"📷 Second search with simpler words: {got} of {len(left)} cards now have a photo"})
+        return (credits or []) + (more or [])
 
     PHOTO_WORDS_PROMPT = """A web page needs stock photos (free photo sites, searched in English). For each entry, write
 the search words of a photo that shows it at once: 2-5 plain English words naming what is SEEN in the photo (people,
@@ -4233,20 +4805,42 @@ best-known scene. Answer {"words": [{"id": ..., "q": ...}]}, one per entry."""
             pass
         return [c for c in credits if c is not mine]
 
-    def _write_site_page(self, root, plan, pspec, f, theme, asked, files=None, single=False):
+    def _link_asked_libraries(self, html, root, pspec):
+        """📦 The libraries the user named: fetched once (their version kept in the spec), copied to lib/, linked. (The
+        one-page build never linked them: a Chart.js asked for was not on the page, 2026-11-17.)"""
+        if not pspec.get("libraries"):
+            return html
+        got = []
+        for lib in pspec["libraries"]:
+            have = lib if lib.get("files") and all(Path(p_).is_file() for p_, _k in lib["files"]) else (
+                webkit.fetch_library(lib) if self._web_enabled() else None)
+            own = re.sub(r"\s+", "-", str(lib.get("name") or "").strip().lower())
+            if not have and self._web_enabled() and own and own != str(lib.get("npm") or "").lower():
+                have = webkit.fetch_library(dict(lib, npm=own))  # (the 4B wrote "aos-animate" for AOS: nothing came, 2026-11-17)
+            got.append(have or lib)
+        pspec["libraries"] = got
+        return webkit.link_libraries(html, root, [x for x in got if x.get("files")])
+
+    def _write_site_page(self, root, plan, pspec, f, theme, asked, files=None, single=False, write=True):
         """One page of a site rendered from its plan and saved (its CSS / JS split into css/ and js/ unless it is a
-        one-page build). Returns (html, its theme CSS, the kit files it uses, the paths written)."""
+        one-page build). Returns (html, its theme CSS, the kit files it uses, the paths written). write=False: only
+        drawn, nothing saved (the page as its plan was before a change, to see which parts the change made)."""
         look = dict(theme, look=dict(theme["look"], hero=pspec.get("hero", "")))
         html = pagebuild.render(plan, pspec, look, asked, pages=files or None, current=f)
         ucss, ujs = webkit.user_code(asked)
         if ucss or ujs:
             html = webkit.inject_user_code(html, ucss, ujs)
+        html = self.apply_looks(html, pspec)
         local, _ = webkit.localize(html, root)
+        local = self._link_asked_libraries(local, root, pspec)
         kit = {k for k in webkit.KIT_FILES if f"lib/{k}" in local}
         if single:
-            self.workspace.write_file(f, local)
+            if write:
+                self.workspace.write_file(f, local)
             return local, "", kit, [f]
         local, tcss, js = pagebuild.split_files(local, f.rsplit(".", 1)[0])
+        if not write:
+            return local, tcss, kit, []
         self.workspace.write_file(f, local)
         paths = [f]
         if js:
@@ -4315,18 +4909,10 @@ best-known scene. Answer {"words": [{"id": ..., "q": ...}]}, one per entry."""
     EXISTING_SCHEMA = {"type": "object", "properties": {
         "why": {"type": "string", "maxLength": 160},
         "decision": {"type": "string", "enum": ["redraw", "edit", "restyle", "new", "question", "unclear"]}}, "required": ["why", "decision"]}
-    TAMIL_TO_ENGLISH = """The user's request about their web page is in Tamil (Tamil letters), Tanglish (Tamil in English
-letters: "venum" = I want it; "venam" / "venaam" / "vendam" / "venna" / "vena" = I do NOT want it, take it away; "podu" /
-"potu" = put; "maathu" = change; "illa" / "varala" = it is not there / not showing) or English, often by speech to text.
-When the page is given, read the request with it: a thing the page ALREADY HAS, named by the user, is rarely asked to be
-added again; they want it changed or taken away. In Tamil letters:
-Tamil words, and English words written in Tamil letters ("கோர்ஸ்" = course, "செக்ஷன்" = section, "கலர்" = colour,
-"ஹப்" = hub, "லெட்டர்" = letter, "அனிமி ஜேஎஸ்" / "அனிமே ஜேஎஸ்" = anime.js, a library's name). Sounds made while
-thinking ("ஆஹ்", "அஹ்", "உம்", "ஆ") are not words: leave them out. Edit words: "ஸ்வாப்" / "சுவாப்" / "சஇ" / "இடம்
-மாத்து" = swap (two things change places, never "combine" or "merge"); "ரிமூவ்" / "நீக்கு" / "தூக்கு" / "வேணாம்" / "வேணா" / "வேண்ணா" = remove (do not want it);
-"மேல" = above / first, "கீழ" = below / after; "பட்டன்" = button; "கிராஃப்" / "கிராப்" = graph; "அனிமேஷன்" = animation. In Tamil the new value comes right before "-னு / -ன்னு / -nu" and the verb after it ("X-னு மாத்து" =
-"change it to X"; "X அப்படின்னு இருக்கற Y" = "the Y that says X"). Write the request in plain English, the same
-meaning, nothing added; names and the words to put on the page stay as words (in English letters, in quotes).
+    # (the language guide is shared with the locate step, which reads the request and writes its English at once)
+    TAMIL_TO_ENGLISH = sitedit.LANGUAGE + """
+Write the request in plain English, the same meaning, nothing added; names and the words to put on the page stay as
+words (in English letters, in quotes).
 Answer {"english": "..."}."""
 
     RENAME_PROMPT = """The user asks to rename their website. The message may be speech written in Tamil letters (English
@@ -4354,8 +4940,11 @@ follows; the user may name it by any of these, or by words close to them (speech
 same section, never a smaller part of it.
 Answer {"wrong": "" or what is wrong and what the user really asks, in one sentence, "matches": true/false}."""
 
-    def _read_edit(self, site, told, said, base, model, key, emit, tries=2):
-        """The 4B's reading of an edit (sitedit.locate_*), checked by a second 4B look; read again once when wrong."""
+    def _read_edit(self, site, told, said, base, model, key, emit, tries=2, check=True):
+        """The 4B's reading of an edit (sitedit.locate_*), checked by a second 4B look; read again once when wrong.
+        check=False (⚡ the page is looked at after the change, editcheck): one reading, no look before it: the look at
+        the page judges the change itself, and a wrong one is put back (the check before it cost ~15 s and doubted
+        right readings)."""
         hint = ""
         raw = {"changes": []}
         for n in range(tries):
@@ -4367,6 +4956,11 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
                 return raw
             plan = "; ".join(sitedit.describe_change(site, c) for c in changes)
             understood = " ".join(str(raw.get("understood") or "").split())
+            if not check:
+                emit({"type": "note", "message": f"🧭 Understood: {understood or plan}"})
+                self._last_understood = understood or plan
+                self._last_expected = " ".join(str(raw.get("expected") or "").split()) or understood or plan
+                return raw
             try:
                 chk, timings = llm.complete_json(base, model, [
                     {"role": "system", "content": self.EDIT_CHECK_PROMPT},
@@ -4451,6 +5045,11 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
         except (OSError, ValueError) as e:
             return f'{pg["file"]}: no photos ({e})'
         got = sum(1 for it in items if it.get("photo"))
+        if got and sec.get("part") in editcheck.LAYOUT_PARTS and not sec.get("_block") and \
+                "each" not in editcheck.LAYOUT_SHOWS.get(sec.get("_layout") or "", ""):
+            # ⚡ photos for the cards: drawn the first time in a layout whose own data says each card shows its photo
+            # (the theme's turn gave "watermark", ONE photo, and only the check's second try fixed it: ~35 s)
+            sec["_layout"] = next(k for k, v in editcheck.LAYOUT_SHOWS.items() if "each" in v)
         if not got:
             return f'{pg["file"]}: no fitting photo was found for "{sec.get("title") or ""}" (a Pexels / Pixabay key in Settings finds more)'
         return (f'{pg["file"]}: {got} of {len(items)} card{"s" if len(items) > 1 else ""} in "{sec.get("title") or ""}" now show a photo'
@@ -4464,6 +5063,9 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
     # what each layout / design / motion shows) and it is drawn again; still not done: the page is put back and the
     # user is told what was seen. Parts the user did not ask about that changed are put back as they were.
     SECTION_SCOPED = {"edit_section", "change_widget", "photos", "motion", "resize_section", "button_text", "other"}
+    # ⚡ changes only a picture can judge (how it looks, its size, a new kind of part, a hand edit); the others are judged
+    # by the measured facts alone (photos, words, buttons, motion, parts gone or moved): no screenshot, no image to read
+    PICTURE_ACTIONS = {"look", "design", "resize_section", "change_widget", "add_section", "other", "scene_part"}
 
     JUDGE_PROMPT = """You check a change M42 made to a user's web page, by what the page SHOWS now, not by what M42 says
 it did. You get the user's words (any language, Tamil or Tanglish: read the meaning), what M42 understood, what a
@@ -4475,6 +5077,8 @@ differs from before and from the rest of the page, and things in it move.
 done: "yes" when a visitor will see what the user asked, where they meant; "partly" when some of it shows; "no" when
 it does not show, shows something else, or the part lost what it had (its words, prices, photos, things) that the
 user did not ask to take away. Judge only what the user asked: a detail they did not ask for is never missing.
+A part that now WORKS where it did not before (a popup whose form can be typed in now, a button that opens now) is a fix
+M42 made to the page's own kit, never a fault.
 Answer {"why": what the page shows now against what was asked, in one or two plain sentences, "done": ...,
 "missing": what is still missing or wrong ("" when done)}."""
 
@@ -4482,12 +5086,76 @@ Answer {"why": what the page shows now against what was asked, in one or two pla
 what a visitor should see, what the check found, the part as it is now, and the ways this part can be drawn and move
 (what each one SHOWS). Choose what gives the visitor what the user asked. A way that cannot show it is never right
 (ONE photo cannot show a photo on each card; a motion the part already has, or the rest of the page has, looks the
-same as before). "" keeps that as it is now. Answer {"why": one sentence, "layout": ..., "block": ..., "reveal": ...,
+same as before). "none" takes a motion away: only when the user asked for less motion, never to add one. "" keeps
+that as it is now (choose "" for what the user did not ask about). Answer {"why": one sentence, "layout": ..., "block": ..., "reveal": ...,
 "hover": ...}."""
+
+    def _warm_locate(self, site):
+        """⚡ The locate step's rules read into llama-server's prompt cache again, in the background, once an edit is
+        done: an edit's photo looks pushed them out of the cache, and the next edit read all 3,800 tokens again (~35 s,
+        2026-11-16). One token is asked; the rules' part of the cache is what is kept."""
+        model = self.active_model()
+        if llamacpp.is_auto(model):
+            model = llamacpp.targets(model)["chat"]
+        if not llamacpp.is_local(model) or not site or not site.get("pages"):
+            return
+        system = sitedit.locate_messages(site, "")[0]["content"]
+
+        def work():
+            body = json.dumps({"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": "."}],
+                               "max_tokens": 1, "temperature": 0, "cache_prompt": True}).encode()
+            req = urllib.request.Request(llamacpp.URL + "/chat/completions", data=body, headers={"Content-Type": "application/json"})
+            with contextlib.suppress(OSError, ValueError):
+                urllib.request.urlopen(req, timeout=120).read()
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _page_measured(self, root, site):
+        """What does not work on the site's pages, measured in a browser (editcheck): a popup that does not open or
+        whose form is covered. [] when all works or nothing could be measured."""
+        out = []
+        for pg in (site.get("pages") or [])[:3]:
+            try:
+                seen = editcheck.see(Path(root) / pg["file"], picture=False)
+            except (OSError, ValueError):
+                seen = None
+            for x in (seen or {}).get("sections") or []:
+                for q in x.get("popups") or []:
+                    name = x["title"] or x["key"]
+                    if q.get("field") and not q.get("typeable"):
+                        out.append(f'in "{name}" the "{q["button"]}" button opens a form covered by {q.get("cover") or "something"}: its fields cannot be typed in')
+                    elif not q.get("opens"):
+                        out.append(f'in "{name}" the "{q["button"]}" button opens nothing')
+        return out[:4]
+
+    def _sync_kit(self, root, site):
+        """The kit's files in lib/ brought up to the shipped version (only the files M42 put there and nobody changed;
+        the union of what every page uses, so no page loses one)."""
+        used = set()
+        for pg in site.get("pages") or []:
+            try:
+                text = (Path(root) / pg["file"]).read_text(encoding="utf-8")
+            except OSError:
+                continue
+            used |= {k for k in webkit.KIT_FILES if f"lib/{k}" in text}
+        if used:
+            with contextlib.suppress(OSError):
+                webkit.sync_files(root, used, "")
+
+    def _edit_timing(self, emit):
+        """⏱ The edit's steps in seconds: reading the request, making the change (photos, drawing), looking at it."""
+        t = getattr(self, "_edit_t", None) or []
+        if len(t) < 2:
+            return
+        names = {"read": "reading your words", "done": "making the change", "checked": "looking at the page"}
+        parts = [f"{names.get(b[0], b[0])} {b[1] - a[1]:.0f} s" for a, b in zip(t, t[1:])]
+        emit({"type": "note", "message": f"⏱ This edit: {' · '.join(parts)} · in all {t[-1][1] - t[0][1] + 0.0:.0f} s"})
 
     def _see_before(self, root, site, changes, emit, on=True):
         """🔍 The pages the change is on, measured and pictured before it (editcheck.see), and the parts it is about."""
         self._edit_seen, self._edit_targets = {}, {}
+        self._edit_plans = {p["file"]: copy.deepcopy(p["plan"]) for p in site.get("pages") or []}
+        self._edit_picture = any(c.get("action") in self.PICTURE_ACTIONS for c in changes) or bool(getattr(self, "_edit_shot", None))
         if not on:
             return
         sid = "esee_" + uuid.uuid4().hex[:6]
@@ -4497,7 +5165,7 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
             pg = sitedit.page(site, c.get("page")) or site["pages"][0]
             f = pg["file"]
             if f not in self._edit_seen:
-                seen = editcheck.see(Path(root) / f)
+                seen = editcheck.see(Path(root) / f, picture=self._edit_picture)
                 if not seen:
                     continue
                 self._edit_seen[f] = seen
@@ -4532,7 +5200,7 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
                 keys.add(editcheck.section_key(after, secs[k], k))
         return {k for k in keys if k}
 
-    def _check_edit(self, root, site, changes, said, before, again, emit, base, model, key, tries=2):
+    def _check_edit(self, root, site, changes, said, before, again, emit, base, model, key, tries=2, redo=None):
         """🔍 The change looked at on the page, judged by the 4B, tried another way when not done. Returns
         {"done": yes/partly/no, "why", "missing", "drawn": pages drawn again}, or None when it could not be looked at."""
         expected = getattr(self, "_last_expected", "") or getattr(self, "_last_understood", "") or said
@@ -4541,6 +5209,14 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
         scoped = all(c.get("action") in self.SECTION_SCOPED for c in changes) and not any(
             "*" in t for t in (self._edit_targets or {}).values())
         drawn, result = [], None
+        self._edit_states, self._edit_redo, self._edit_acts = [], None, set()  # (each way drawn so far: a second try never goes back to one)
+        motion_only = bool(changes) and all(c.get("action") == "motion" and isinstance(c.get("section"), int)
+                                            and c["section"] >= 0 for c in changes)
+        # 🎨 a colour or light / dark change is a fact too: the page's own accent / theme, measured (a picture of sky
+        # blue #0ea5e9 and of light blue #60a5fa looked alike: the 4B said "still the old blue" and a right change was
+        # undone, 2026-11-17)
+        look_only = bool(changes) and all(c.get("action") == "look" and (c.get("colors") or c.get("theme") in ("light", "dark"))
+                                          for c in changes)
         for n in range(tries + 1):
             if self.stop_event.is_set():
                 break
@@ -4548,7 +5224,7 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
             emit({"type": "progress", "id": cid, "text": "🔍 Looking at the page after the change: does it show what you asked?"})
             facts_t, facts_o, pics, afters = [], [], [], {}
             for f, seen0 in self._edit_seen.items():
-                after = editcheck.see(Path(root) / f)
+                after = editcheck.see(Path(root) / f, picture=self._edit_picture)
                 if not after:
                     continue
                 targets = self._targets_after(site, f, changes, seen0, after)
@@ -4558,10 +5234,12 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
                     fixed, back = editcheck.restore_sections(cur, before[f], okeys)
                     if back:
                         self.workspace.write_file(f, fixed)
-                        names = [next((s["title"] or s["key"] for s in after["sections"] if s["key"] == b), b) for b in back]
+                        where = {"nav": "the menu bar", "header": "the top of the page", "footer": "the footer"}
+                        names = [next((s["title"] or where.get(s["tag"], s["key"]) for s in after["sections"] if s["key"] == b), b)
+                                 for b in back]
                         emit({"type": "note", "message": "🛡 Put back as they were (you did not ask to change them): "
                                                          + ", ".join(f'"{x}"' for x in names)})
-                        after = editcheck.see(Path(root) / f) or after
+                        after = editcheck.see(Path(root) / f, picture=self._edit_picture) or after
                         tl, ol, okeys = editcheck.compare(seen0, after, targets)
                 afters[f] = (after, targets)
                 facts_t += [f"- {f}: {x}" for x in tl]
@@ -4571,6 +5249,29 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
                     pics.append(im)
             if not afters:
                 return None
+            for f, (after, targets) in afters.items():  # the ways drawn: (part, reveal, hover), before and now
+                b0 = {x["key"]: x for x in self._edit_seen[f]["sections"]}
+                for x in after["sections"]:
+                    if x["key"] in targets:
+                        y = b0.get(x["key"]) or x
+                        self._edit_states += [(x["key"], y["reveal"], y["hover"]), (x["key"], x["reveal"], x["hover"])]
+            if look_only:
+                result = self._look_verdict(changes, afters)
+                mark = {"yes": "✓", "partly": "◐", "no": "✕"}[result["done"]]
+                emit({"type": "progress", "id": cid, "done": True, "text": f"🔍 {mark} {result['why']} (measured on the page)"})
+                break
+            if motion_only:  # ⚡ how a part moves is a fact, measured: no 4B look (it said "fade-up is not enough", then
+                # "stagger is wrong, fade-up was asked", 2026-11-16: three tries, 59 s)
+                result = self._motion_verdict(afters)
+                mark = {"yes": "✓", "partly": "◐", "no": "✕"}[result["done"]]
+                emit({"type": "progress", "id": cid, "done": True, "text": f"🔍 {mark} {result['why']} (measured on the page)"})
+                if result["done"] == "yes" or n == tries:
+                    break
+                picked = self._edit_retry(site, changes, said, expected, result, afters, emit, base, model, key)
+                if not picked:
+                    break
+                drawn += [f for f in again(set(picked)) if f not in drawn]
+                continue
             text = (f"The user's words: {said[:500]}\nM42 understood: {understood}\nA visitor should see: {expected}\n\n"
                     "Facts measured on the page, before -> after (the parts the change is about):\n"
                     + ("\n".join(facts_t)[:3500] or "- nothing on the page changed")
@@ -4598,12 +5299,74 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
             picked = self._edit_retry(site, changes, said, expected, result, afters, emit, base, model, key)
             if not picked:
                 break
+            if self._edit_redo and redo:  # 🔁 another kind of change (the button's words, a line edit) in its place
+                ch, self._edit_redo = self._edit_redo, None
+                got = redo(ch)
+                if not got:
+                    break
+                drawn += [f for f in got if f not in drawn]
+                continue
             drawn += [f for f in again(set(picked)) if f not in drawn]
         if result is not None:
             result["drawn"] = drawn
             result["tried"] = getattr(self, "_edit_tried", []) if drawn else []
         self._edit_tried = []
         return result
+
+    def _look_verdict(self, changes, afters):
+        """A look change judged by the facts: the page's accent is the colour asked (the theme makes a colour readable, so
+        a near shade of it counts), its light / dark is the one asked."""
+        def rgb(x):
+            m = re.search(r"#([0-9a-fA-F]{6})", str(x or ""))
+            if m:
+                return tuple(int(m.group(1)[i:i + 2], 16) for i in (0, 2, 4))
+            m = re.search(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", str(x or ""))
+            return tuple(int(v) for v in m.groups()) if m else None
+        oks, why = [], []
+        for c in changes:
+            for f, (after, _t) in afters.items():
+                pg_ = after.get("page") or {}
+                if c.get("colors"):
+                    want, have = rgb(c["colors"][0]), rgb(pg_.get("accent"))
+                    was = rgb(((self._edit_seen.get(f) or {}).get("page") or {}).get("accent"))
+                    dist = lambda x, y: sum((p_ - q_) ** 2 for p_, q_ in zip(x, y)) ** .5
+                    # (the colour asked, or a readable shade of it: changed, and nearer to it than the page was)
+                    near = bool(want and have and (dist(want, have) <= 60 or (was and have != was and dist(want, have) < dist(want, was)))) 
+                    oks.append(near)
+                    why.append(f'the page\'s colour is now {pg_.get("accent") or "?"} (asked {c["colors"][0]})')
+                if c.get("theme") in ("light", "dark"):
+                    oks.append(pg_.get("theme") == c["theme"])
+                    why.append(f'the page is {pg_.get("theme") or "?"} (asked {c["theme"]})')
+        done = "yes" if oks and all(oks) else "partly" if any(oks) else "no"
+        return {"done": done, "why": "; ".join(why) or "the page could not be measured",
+                "missing": "" if done == "yes" else "the colour / theme asked is not the page's"}
+
+    def _motion_verdict(self, afters):
+        """A motion change judged by the facts: the part's reveal / hover or what moves in it differs from before, and
+        something in it moves (or the change took the motion away: then nothing does)."""
+        lines, ok = [], []
+        for f, (after, targets) in afters.items():
+            b0 = {x["key"]: x for x in self._edit_seen[f]["sections"]}
+            for x in after["sections"]:
+                if x["key"] not in targets or x["key"] not in b0:
+                    continue
+                y = b0[x["key"]]
+                sig0 = (y["reveal"], y["hover"], y["moving"], y["hovering"])
+                sig1 = (x["reveal"], x["hover"], x["moving"], x["hovering"])
+                moves = (x["reveal"] != "none" and x["moving"] > 0) or (x["hover"] != "none" and x["hovering"] > 0)
+                still = x["reveal"] == "none" and x["hover"] == "none"
+                ok.append(sig1 != sig0 and (moves or still))
+                lines.append(f'"{x["title"] or x["key"]}" comes in with "{x["reveal"]}" ({x["moving"]} things move in), hover '
+                             f'"{x["hover"]}" ({x["hovering"]} react); before: "{y["reveal"]}" ({y["moving"]}), hover "{y["hover"]}"'
+                             f' ({y["hovering"]})')
+        done = "yes" if ok and all(ok) else "no"
+        return {"done": done, "why": "; ".join(lines) or "the part was not found on the page",
+                "missing": "" if done == "yes" else "its motion looks the same as before"}
+
+    # the other kinds of change a second try can be (data: what each does), when the first kind changed nothing
+    ACTION_SHOWS = {"button_text": "new WORDS on one of the page's buttons: ONLY when the user asked for other words on a button",
+                    "other": "a hand edit of the page's code: for a thing that does not work or does not look right (a popup, a "
+                             "button that does nothing, a style), or what no other kind can do"}
 
     def _edit_retry(self, site, changes, said, expected, verdict, afters, emit, base, model, key):
         """🔁 Another way for the part the change is about, chosen by the 4B from what each way shows. Returns the
@@ -4618,13 +5381,22 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
             kd = editcheck.section_key(after, sec, k)
             drawn_now = next((s for s in after["sections"] if s["key"] == kd), None)
             opts, layouts, blocks_ = editcheck.options(sec, drawn_now, after["page"])
+            # (another kind of change starts again from the page as it was: never after a "partly", whose good part it
+            # would throw away: a popup fixed by a line edit was undone for a button rename, 2026-11-17)
+            acts = [a for a in self.ACTION_SHOWS if a != c.get("action") and a not in self._edit_acts] if verdict.get("done") == "no" and c.get("action") in ("edit_section", "other", "button_text") else []
+            if acts:
+                btns = ", ".join(f'"{b}"' for b in (drawn_now or {}).get("buttons", [])[:6])
+                opts += (chr(10) + f'action (another kind of change in place of this one; now {c.get("action")}):' + chr(10)
+                         + chr(10).join(f"  {a}: {self.ACTION_SHOWS[a]}" + (f" (this part's buttons: {btns})" if a == "button_text" and btns else "")
+                                        for a in acts))
             schema = {"type": "object", "properties": {
+                "action": {"type": "string", "enum": [""] + acts},
                 "why": {"type": "string", "maxLength": 200},
                 "layout": {"type": "string", "enum": [""] + layouts},
                 "block": {"type": "string", "enum": [""] + blocks_},
                 "reveal": {"type": "string", "enum": [""] + list(editcheck.REVEAL_SHOWS)},
                 "hover": {"type": "string", "enum": [""] + list(editcheck.HOVER_SHOWS)}},
-                "required": ["why", "layout", "block", "reveal", "hover"]}
+                "required": ["why", "action", "layout", "block", "reveal", "hover"]}
             try:
                 got, timings = llm.complete_json(base, model, [
                     {"role": "system", "content": self.RETRY_PROMPT},
@@ -4635,6 +5407,14 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
                 self._emit_stats(emit, "another way", timings)
             except (llm.LLMError, ValueError, OSError):
                 return []
+            if got.get("action") in acts:  # another kind of change: the edit's own steps do it (redo in edit_site)
+                self._edit_redo = dict(c, action=got["action"])
+                self._edit_acts.add(got["action"])  # (each kind once)
+                emit({"type": "note", "message": f"🔁 Not done yet ({verdict.get('missing') or verdict['why']}): trying it as "
+                                                 f"{got['action'].replace('_', ' ')}" + (f" ({got.get('why')})" if got.get("why") else "")})
+                self._edit_tried = []
+                return [pg["file"]]
+            keep = {x: sec.get(x) for x in ("_layout", "_block", "reveal", "hover")}
             tried = []
             if got.get("layout") in layouts and got["layout"] != sec.get("_layout"):
                 sec["_layout"] = got["layout"]
@@ -4650,6 +5430,15 @@ same as before). "" keeps that as it is now. Answer {"why": one sentence, "layou
             if got.get("hover") in editcheck.HOVER_SHOWS and got["hover"] != (drawn_now or {}).get("hover"):
                 sec["hover"] = got["hover"]
                 tried.append(f'hover "{got["hover"]}"')
+            new_way = (kd, sec.get("reveal") or (drawn_now or {}).get("reveal"), sec.get("hover") or (drawn_now or {}).get("hover"))
+            if tried and not keep["_layout"] != sec.get("_layout") and not keep["_block"] != sec.get("_block") \
+                    and new_way in self._edit_states:  # never back to a way already drawn, or to the part as it was
+                for x, v in keep.items():
+                    if v is None:
+                        sec.pop(x, None)
+                    else:
+                        sec[x] = v
+                tried = []
             if not tried:
                 return []
             emit({"type": "note", "message": f"🔁 Not done yet ({verdict.get('missing') or verdict['why']}): trying "
@@ -4718,7 +5507,9 @@ like "awesome", "nice", "premium", "with good UX" do not make it another page):
   menu, cards and data and the user asks for THAT ("ithe mathiri ready pannu", "build like this", "make these"):
   what the pictures show is built and the page there is kept as a backup; or the user asks to start over
   ("from scratch", "puthusa", "fresh", "full new").
-- question: the user asks something about the page or its code (what, why, how, "ithu enna"), no change asked.
+- question: the user asks something about the page or its code (what, why, how, "ithu enna"), no change asked. A
+  report that something on the page does not work or does not look right ("the Add Staff button does not work", "X
+  varala", "X sariya illa", "the popup's overlay covers the form") is never a question: it is edit (fix it).
 - unclear: the words make no request at all: sounds or broken words (speech to text heard noise: "டும்ம் சுந்தர்ஹோ
   ந"), or too few to know what is wanted. Never new for such words: a new build replaces the page there.
 Answer {"why": one short sentence for the user, "decision": ...}."""
@@ -5295,10 +6086,16 @@ line that you will do it if they send it as a change."""
         only the pages it touches rendered again; what a plan can't say is a line edit on that one file (kept with
         the page). Shows each file's diff, checks the pages in the browser."""
         self.stop_event.clear()
+        self._edit_t = [("start", time.time())]  # ⏱ each step's time, said at the end (where an edit's minutes go)
         self._edit_scene_marked = False  # (set when the user's 📷 mark is on the hero's 3D scene)
         root = self.workspace.roots[0][1]
         site = sitedit.load(root)
         self.use_intent(((site.get("pages") or [{}])[0].get("spec") or {}).get("intent") or {})
+        site_was = copy.deepcopy(site)  # 🧩 the plans as they were: what the change made is what differs from them
+        try:
+            theme_was = webkit.make_theme(site.get("asked", ""), look=site.get("look"))
+        except (ValueError, KeyError, TypeError):
+            theme_was = None
         base, key = llamacpp.base_url_for(self.config), self.config.get("api_key") or None
         model = self.active_model()
         undo_id = self.undo_snapshot(root, site)  # ↶ the files as they are now: the user's Undo brings them back
@@ -5317,6 +6114,14 @@ line that you will do it if they send it as a change."""
                 self.workspace.write_file(pg["file"], fixed)
                 emit({"type": "note", "message": f"🩹 {pg['file']}: removed {', '.join(removed)}: it closed the page's "
                                                  "layout early (content under the menu)"})
+        pick = getattr(self, "_edit_pick", None) if not redraw else None
+        if pick:
+            pg_ = sitedit.page(site, pick["page"])
+            if pg_:
+                k_ = self._plan_section_at((root / pg_["file"]).read_text(encoding="utf-8"), pg_["plan"].get("sections"), pick["line"])
+                if k_ >= 0:
+                    pic_sec = (pg_["file"], k_)
+            emit({"type": "note", "message": f'🎯 The part you clicked: <{pick["label"]}> "{pick["words"][:60]}"'})
         lid = "locate_" + uuid.uuid4().hex[:8]
         placed = None  # the user's own photo put where they marked a photo on a 📷 of the page (no model)
         if getattr(self, "_edit_photos", None) and getattr(self, "_edit_mark", None) and not redraw:
@@ -5332,7 +6137,10 @@ line that you will do it if they send it as a change."""
         else:
             emit({"type": "progress", "id": lid, "text": "🔎 Finding where the change goes: which page, which section"})
             own_words = message  # (the user's own words: the check of the reading reads THEM, the English beside them)
-            told = self._in_english(message, emit, base, model, key, page=sitedit.outline(site, budget=600))
+            # ⚡ with a browser the page is looked at after the change: the locate step reads the words and writes their
+            # English itself (one call, not three: the English, the reading and its check took ~35 s, 2026-11-16)
+            fast = bool(browser.find_browser())
+            told = message if fast else self._in_english(message, emit, base, model, key, page=sitedit.outline(site, budget=600))
             message = told  # (every step after: the section's rewrite read the Tamil letters alone and changed nothing,
             # "எனி டிவைஸ் ... இன்னும் ஒரு பாயிண்ட் ஆட் பண்ணு", 2026-11-13)
             # the page's own sentences the user quotes (an About line, a card's text): where they are, for the model
@@ -5358,12 +6166,36 @@ line that you will do it if they send it as a change."""
                 # Collection la product image add pannu" became "... to the 'Shop by Category' and 'Explore Our
                 # Collection' sections", and the right one-section reading was doubted as missing a second, 2026-11-16)
                 said = own_words if own_words.strip() == message.strip() else own_words + chr(10) + f"(M42's English of them: {message})"
-                raw = self._read_edit(site, told, said, base, model, key, emit)
+                if pick:
+                    told += chr(10) + (f'(The user clicked this part on the page {pick["page"]} to say which one they mean: '
+                                       f'<{pick["label"]}> "{pick["words"]}"'
+                                       + (f", in section {pic_sec[1] + 1}" if pic_sec else "") + ")")
+                broken = self._page_measured(root, site)
+                if broken:  # (the user's "add staff: the overlay blocks the inputs" was read as "add a modal section":
+                    # the page's own popup, covered by its backdrop, measured, is the thing to fix, 2026-11-17)
+                    told += chr(10) + "(Measured on the page now, by M42 in a browser: " + "; ".join(broken) + ")"
+                    emit({"type": "note", "message": "🔬 Measured on the page now: " + "; ".join(broken)})
+                raw = self._read_edit(site, told, said, base, model, key, emit, check=not fast)
+                english = " ".join(str(raw.get("english") or "").split())
+                if fast and english and " ".join(english.lower().split()) != " ".join(own_words.lower().split()):
+                    emit({"type": "note", "message": f"🗣 Read as: {english}"})
+                    message = english + chr(10) + f"(The user's own words: {own_words})"  # (every step after reads it)
             except (llm.LLMError, ValueError, OSError) as e:
                 emit({"type": "progress", "id": lid, "done": True, "text": f"🔎 Could not place the change ({e})"})
                 emit({"type": "done"})
                 return False
-        if raw.get("_doubt"):  # 🤔 not sure what is meant: asked, nothing changed
+        self._edit_t.append(("read", time.time()))
+        self._edit_doubt = None
+        if raw.get("_doubt") and browser.find_browser():
+            # 🤔 the reading was doubted twice: it is done and the PAGE is looked at (editcheck); kept only when the check
+            # says it shows what the user asked, else put back and the user asked (a right reading was doubted on its
+            # words alone, 2026-11-16: "Top Picks" and "Bestsellers" taken for two parts of the page)
+            self._edit_doubt = raw.pop("_doubt")
+            self._last_understood = self._last_understood or self._edit_doubt[0]
+            self._last_expected = getattr(self, "_last_expected", "") or self._edit_doubt[0]
+            emit({"type": "note", "message": f"🤔 Not sure of this reading ({self._edit_doubt[1]}): doing it and looking at "
+                                             "the page; it is kept only if it shows what you asked"})
+        if raw.get("_doubt"):  # 🤔 not sure what is meant, and no browser to look: asked, nothing changed
             reading, doubt = raw["_doubt"]
             answer = (f"🤔 I am not sure what you mean, so I changed nothing. I read it as: \"{reading}\""
                       + (f", but that does not fit your words ({doubt})" if doubt else "")
@@ -5542,12 +6374,29 @@ line that you will do it if they send it as a change."""
             for pg in site["pages"]:
                 if pg["file"] not in pages_:
                     continue
+                was = sitedit.page(site_was, pg["file"]) if not redraw else None
+                prev = None
+                if was and theme_was and before.get(pg["file"]):
+                    try:  # the page drawn from its plan as it was (today's templates): the parts that differ are the change
+                        prev = self._write_site_page(root, was["plan"], was["spec"], pg["file"], theme_was, site_was.get("asked", ""),
+                                                     files, single=site_was.get("single"), write=False)[0]
+                    except (OSError, ValueError, KeyError, TypeError):
+                        prev = None
                 local, tcss, kit, paths = self._write_site_page(root, pg["plan"], pg["spec"], pg["file"], theme, site.get("asked", ""),
                                                                 files, single=site.get("single"))
                 used.update(kit)
                 theme_box[0] = theme_box[0] or tcss
                 pg["rendered"] = local
-                if pg["file"] in carry:  # everything changed in the file since it was drawn (fixes, rules, hand edits)
+                merged = domnode.merge_render(prev, local, before.get(pg["file"])) if prev else None
+                if merged is not None:
+                    # 🧩 the HTML is the truth: only the parts the change made are put into the page as it is; every
+                    # other part (the user's edits, block edits, fixes) stays byte for byte (the user, 2026-11-17)
+                    for ed in carry.get(pg["file"]) or pg.get("hand_edits") or []:
+                        if ed[0] and merged.count(ed[0]) == 1 and ed[1] not in merged:
+                            with contextlib.suppress(ValueError):  # (an edit of theirs inside a part drawn anew, if it fits)
+                                merged = codeedit.apply_edits(merged, [ed])
+                    self.workspace.write_file(pg["file"], merged)
+                elif pg["file"] in carry:  # everything changed in the file since it was drawn (fixes, rules, hand edits)
                     text, lost = local, 0
                     for ed in carry[pg["file"]]:
                         try:
@@ -5597,7 +6446,9 @@ line that you will do it if they send it as a change."""
             if k_ >= 0 and secs_[k_].get("title"):  # the section the change is in: only its lines are read
                 t_ = str(secs_[k_]["title"]).strip().lower()
                 focus = (secs_[k_]["title"], sum(1 for x in secs_[:k_] if str(x.get("title") or "").strip().lower() == t_))
-            edits, new = self._line_edits(old, pg["file"], f'{message} ({ch.get("what") or ""})', emit, focus=focus)
+            pick = getattr(self, "_edit_pick", None) or {}
+            edits, new = self._node_edit(old, pg["file"], f'{message} ({ch.get("what") or ""})', emit, focus=focus,
+                                         node=pick.get("node") if pick.get("page") == pg["file"] else None)
             if new:  # a library the coder linked from the web: the kit's own copy in lib/ instead (no download)
                 new = webkit.local_kit(new) if hasattr(webkit, "local_kit") else new
             if new and new != old:
@@ -5610,6 +6461,20 @@ line that you will do it if they send it as a change."""
         self._keep_site(root, site)
         self.workspace_changed = True
 
+        self._edit_t.append(("done", time.time()))
+        self._sync_kit(root, site)
+        early = None  # ⚡ the change shown at once; the look at the page runs after it (its verdict follows)
+        if getattr(self, "_edit_seen", None) and written and not self.stop_event.is_set():
+            try:
+                previews = Path(__file__).resolve().parent / "cache" / "previews"
+                shown = [p["file"] for p in site["pages"]] + (["css/theme.css"] if not site.get("single") else [])
+                early = webkit.make_preview_folder(root, previews, shown)
+                emit({"type": "page_preview", "id": early, "url": f"/preview/{early}/{written[0]}", "download": f"/api/page/download?id={early}"})
+                emit({"type": "note", "message": "👀 Here is the change; M42 is now looking at the page to check it"})
+                early = (early, {f: (root / f).read_text(encoding="utf-8") for f in shown if (root / f).is_file()})
+            except OSError:
+                early = None
+
         def again(pages_):  # a second try of the check: the pages drawn again, the kit's files, the plans kept
             got = draw(pages_)
             if used:
@@ -5617,13 +6482,51 @@ line that you will do it if they send it as a change."""
             self._keep_site(root, site)
             return got
 
-        verdict = self._check_edit(root, site, changes, message, before, again, emit, base, model, key)             if getattr(self, "_edit_seen", None) and not self.stop_event.is_set() else None
+        def redo(ch):  # 🔁 another kind of change in place of the first: the page and its plan as they were, then it
+            pg = sitedit.page(site, ch.get("page")) or site["pages"][0]
+            f = pg["file"]
+            if f in (getattr(self, "_edit_plans", None) or {}):
+                pg["plan"] = copy.deepcopy(self._edit_plans[f])
+            if before.get(f):
+                self.workspace.write_file(f, before[f])
+            got = []
+            notes[:] = [n_ for n_ in notes if not n_.startswith(f"{f}: ")]  # (the first kind's note is no longer true)
+            if ch["action"] == "button_text":
+                note = self._button_words(root, pg, message, ch, emit, base, model, key)
+                if note:  # (its other places are put back by the check when the user did not mean them)
+                    notes.append(re.sub(r" \(\d+ places\)$", "", note))
+                    got = [f]
+            elif ch["action"] == "other" and self.loaded_for_edit(emit):
+                old = (root / f).read_text(encoding="utf-8")
+                edits, new = self._node_edit(old, f, f'{message} ({ch.get("what") or ""})', emit)
+                if new and new != old:
+                    self.workspace.write_file(f, webkit.local_kit(new) if hasattr(webkit, "local_kit") else new)
+                    pg.setdefault("hand_edits", []).extend(edits)
+                    notes.append(f'{f}: {ch.get("what") or "changed"} (a line edit)')
+                    got = [f]
+            self._keep_site(root, site)
+            return got
+
+        verdict = self._check_edit(root, site, changes, message, before, again, emit, base, model, key, redo=redo) \
+            if getattr(self, "_edit_seen", None) and not self.stop_event.is_set() else None
+        self._edit_t.append(("checked", time.time()))
         if verdict:
             written += [f for f in verdict.get("drawn", []) if f not in written]
-        if verdict and verdict["done"] == "no" and undo_id:  # ✕ not what was asked, after the tries: the page as it was
+        doubted = getattr(self, "_edit_doubt", None)
+        if undo_id and ((verdict and verdict["done"] == "no") or (doubted and (not verdict or verdict["done"] != "yes"))):
+            # ✕ not what was asked after the tries (or a doubted reading not clearly right): the page as it was
             self.undo(undo_id)
             emit({"type": "note", "message": "↶ The page is back as it was: the change did not show as you asked"})
-            answer = (f"✕ I could not make this show on the page as you asked, so I changed nothing. What I saw: {verdict['why']}"
+            if early:  # (the preview shown at once had the change: the page as it is again)
+                with contextlib.suppress(OSError):
+                    pid = webkit.make_preview_folder(root, Path(__file__).resolve().parent / "cache" / "previews",
+                                                     list(early[1]))
+                    emit({"type": "page_preview", "id": pid, "url": f"/preview/{pid}/{site['pages'][0]['file']}",
+                          "download": f"/api/page/download?id={pid}"})
+            answer = ((f"🤔 I was not sure what you mean, I tried \"{doubted[0]}\" and the page did not clearly show what you "
+                       f"asked ({(verdict or {}).get('why') or 'it could not be checked'}), so I changed nothing. Say it once more in "
+                       "other words, or mark the part on a 📷 of the page.") if doubted else
+                      f"✕ I could not make this show on the page as you asked, so I changed nothing. What I saw: {verdict['why']}"
                       + (f" (still missing: {verdict['missing']})" if verdict.get("missing") else "")
                       + ". Say it another way, or mark the part on a 📷 of the page.")
             self.messages += [{"role": "user", "content": message}, {"role": "assistant", "content": answer}]
@@ -5631,7 +6534,9 @@ line that you will do it if they send it as a change."""
             emit({"type": "assistant_text", "text": answer})
             self._last_understood = ""
             self._edit_seen = {}
+            self._edit_timing(emit)
             emit({"type": "done"})
+            self._warm_locate(site)
             return False
         for f in dict.fromkeys(w for w in written if w.endswith(".html")):
             new = (root / f).read_text(encoding="utf-8")
@@ -5663,10 +6568,12 @@ line that you will do it if they send it as a change."""
             answer += (chr(10) + "🔍 Checked on the page: " if verdict["done"] == "yes" else chr(10) + "⚠ Only partly done: ") + verdict["why"] + (
                 f" Still missing: {verdict['missing']}." if verdict["done"] != "yes" and verdict.get("missing") else "")
         self._edit_seen = {}
+        self._edit_timing(emit)
         self.messages += [{"role": "user", "content": message}, {"role": "assistant", "content": answer}]
         emit({"type": "assistant_start"})
         emit({"type": "assistant_text", "text": answer})
-        if written:
+        same = early and all((root / f).is_file() and (root / f).read_text(encoding="utf-8") == t for f, t in early[1].items())
+        if written and not same:  # (the early preview already shows it when the check changed nothing)
             previews = Path(__file__).resolve().parent / "cache" / "previews"
             pid = webkit.make_preview_folder(root, previews, [p["file"] for p in site["pages"]] + (["css/theme.css"] if not site.get("single") else []))
             emit({"type": "page_preview", "id": pid, "url": f"/preview/{pid}/{written[0]}", "download": f"/api/page/download?id={pid}"})
@@ -5683,6 +6590,7 @@ line that you will do it if they send it as a change."""
                 emit({"type": "edit_ask", "id": undo_id, "understood": understood[:240]})
         self._last_understood = ""
         emit({"type": "done"})
+        self._warm_locate(site)
 
     def learn_from_edit(self, edit_id, right):
         """The user's answer to "was this edit right?": a yes keeps it as a lesson (what such words meant, what was
@@ -5782,6 +6690,17 @@ No ``` fences, no line numbers."""
         ask = self._in_english(ask, emit, base, model, key)
         nl = "\r\n" if "\r\n" in text else "\n"
         before, marked, after = lines[:start - 1], lines[start - 1:end], lines[end:]
+        tb = re.search(r'<style id="m42-theme">.*?</style>', text, re.S)
+        if tb and p.suffix.lower() in (".html", ".htm") and sitedit.load(self.workspace.roots[0][1]) is not None:
+            a_, b_ = len("".join(before)), len("".join(before + marked))
+            if a_ < tb.end() and b_ > tb.start():
+                # 🎨 the marked lines are M42's theme block, written from the site's look: the change goes to the look,
+                # drawn again whole (a coder rewrote line 13 for "light blue", kept --bs-primary and lost --m42-accent:
+                # nothing on the page changed, 2026-11-17)
+                emit({"type": "note", "message": f"🎨 {rel} {span} is M42's theme block (written from the site's look): "
+                                                 "the change is made to the site's look, so every part follows it"})
+                self.messages += [{"role": "user", "content": f"{rel} {span}: {ask}"}]
+                return self.edit_site(ask, emit)
         show = lambda rows, first: "".join(f"{first + i:>5}| {r}" for i, r in enumerate(rows))  # noqa: E731
         html_page = p.suffix.lower() in (".html", ".htm")
         facts = ""
@@ -5979,6 +6898,176 @@ dialog = notify "popup"; back to top = to_top; reading bar = progress; numbers c
         """The coder for a line edit (Auto loads it; a single model is used as it is)."""
         loader = getattr(self, "load_model", None)
         return bool(loader("code", emit)) if loader else True
+
+    NODE_PICK_PROMPT = """You find where on a web page a change goes. You see a map of one part of the page: each line is
+one block of it, "[number] <tag#id.class attributes> "its words"", the blocks inside it indented under it, and
+the user's request. Answer:
+- target: the number of the ONE block the change is made in: the smallest block that holds everything the change
+  touches (one card: that card; several rows of a table: the table; a button and the popup it opens: the block
+  with both; the part's heading or text: that heading / text).
+- why: a few words: which part that is."""
+
+    NODE_EDIT_PROMPT = """You change one block of a web page's HTML, as the user asks. You see the block's code, facts
+about the page, and the request. Answer:
+- code: the WHOLE block written again with the change made: the same outer tag, every id, class and data-
+  attribute kept (the page's script and CSS use them) unless the change is to them, the words not asked about kept
+  as they are. The same code when the block needs no change.
+- add: code the change needs OUTSIDE the block (a <style> rule, a <script>), else "". Use only the page's own
+  libraries listed in the facts (a <script src="lib/..."> for one the page does not load yet), never a link to
+  another site.
+- where: "head_end" (before </head>, for a <style>), "body_end" (before </body>, for a <script>), or "" when add
+  is "".
+- why: one short sentence for the user: what you changed; or, when this block cannot do what was asked, why.
+No ``` fences."""
+
+    NODE_MAX = 12000  # (characters: a block bigger than this is looked into, one block in it chosen)
+
+    def _node_edit(self, old, name, message, emit, focus=None, node=None):
+        """🧩 A change made to ONE block of the page (domnode): the 4B reads a short map of the section (its blocks'
+        tags and words, no code) and picks the block by its number (or the user clicked it on the preview: `node`),
+        then writes that block alone again; M42 puts it in the file's own text in its place, every other byte as it
+        was (the user's idea, 2026-11-17: "DOM skeleton indexing, two-pass routing, node swap"). A whole numbered
+        page overflowed the 4B's context and SEARCH lines that did not match changed nothing (ERP, 2026-11-17).
+        Returns (edits, new text or None), as _line_edits; a page that is not HTML, or no block found: _line_edits."""
+        if not name.lower().endswith((".html", ".htm")):
+            return self._line_edits(old, name, message, emit, focus=focus)
+        nodes = domnode.index(old)
+        if not nodes:
+            return self._line_edits(old, name, message, emit, focus=focus)
+        base, key, model = llamacpp.base_url_for(self.config), self.config.get("api_key") or None, self.active_model()
+        nid = node if node in nodes else None
+        roots = None
+        if nid is None:
+            win = codeedit.section_window(old, *focus) if focus else None
+            if win:
+                inside = domnode.in_lines(nodes, *win)
+                secs_ = [i for i in inside if nodes[i]["tag"] in domnode.SECTIONS]
+                roots = secs_[:1] or inside
+            roots = roots or domnode.body_nodes(nodes)
+        for _level in range(3):
+            if nid is not None and len(domnode.source(old, nodes[nid])) <= self.NODE_MAX:
+                break
+            look = roots
+            if nid is not None:  # (too big: one block inside it)
+                look = [k for k in nodes[nid]["kids"] if nodes[k]["tag"] not in domnode.HIDDEN] or [nid]
+            mp = domnode.skeleton(nodes, look)
+            ids = sorted({int(m) for m in re.findall(r"^\s*\[(\d+)\]", mp, re.M)})
+            if not ids:
+                break
+            try:
+                raw, timings = llm.complete_json(base, model, [
+                    {"role": "system", "content": self.NODE_PICK_PROMPT},
+                    {"role": "user", "content": f"The map of the part of {name}:\n{mp}\n\nThe user asks: {message}"}],
+                    {"type": "object", "properties": {"target": {"type": "string", "enum": [str(i) for i in ids]},
+                                                      "why": {"type": "string", "maxLength": 120}},
+                     "required": ["target", "why"]}, max_tokens=60, api_key=key)
+                self._emit_stats(emit, "block", timings)
+                nid = int(raw["target"])
+                emit({"type": "note", "message": f"🧩 The block: [{nid}] <{domnode._label(nodes[nid]).split(' ')[0]}> "
+                                                 f'"{domnode.all_words(nodes, nid, 60)[:60]}" ({raw.get("why") or ""})'})
+            except (llm.LLMError, ValueError, OSError, KeyError):
+                break
+        if nid is None or len(domnode.source(old, nodes[nid])) > self.NODE_MAX:
+            return self._line_edits(old, name, message, emit, focus=focus)
+        n = nodes[nid]
+        block = domnode.source(old, n)
+        root_ = Path(self.workspace.roots[0][1]) if self.workspace.roots else None
+        libs = sorted(f.name for f in (root_ / "lib").glob("*.js")) if root_ and (root_ / "lib").is_dir() else []
+        loaded = sorted(set(re.findall(r'<script[^>]+src=["\']([^"\']+)', old)))
+        values = codeedit.css_colours(root_, old)
+        colours = [f"{k} = {v}" for k, v in sorted(values.items())][:20]
+        par = nodes.get(n["parent"])
+        facts = (f"The page: {name}. The block is inside <{domnode._label(par)}>." if par else f"The page: {name}.") + \
+            f"\nThe page's own scripts in lib/: {', '.join(libs) or 'none'}; it loads: {', '.join(loaded) or 'no script'}." + \
+            ("\nThe page's colour variables: " + "; ".join(colours) if colours else "")
+        msgs = [{"role": "system", "content": self.NODE_EDIT_PROMPT},
+                {"role": "user", "content": f"{facts}\n\nTHE BLOCK:\n{block}\n\nThe user asks: {message}"}]
+        schema = {"type": "object", "properties": {
+            "code": {"type": "string", "maxLength": 30000}, "add": {"type": "string", "maxLength": 8000},
+            "where": {"type": "string", "enum": ["", "body_end", "head_end"]}, "why": {"type": "string", "maxLength": 300}},
+            "required": ["code", "add", "where", "why"]}
+        want = codeedit.tag_balance(block)
+        raw, code, add, where = {}, "", "", ""
+        for attempt in range(2):
+            try:
+                raw, timings = llm.complete_json(base, model, msgs, schema, max_tokens=min(6000, len(block) // 3 + 800),
+                                                 api_key=key)
+                self._emit_stats(emit, "block edit", timings)
+            except (llm.LLMError, ValueError, OSError) as e:
+                emit({"type": "check", "message": f"🧩 The block edit failed: {e}"})
+                return [], None
+            code = re.sub(r"^```\w*\n?|\n?```$", "", str(raw.get("code") or "").strip())
+            add, where = str(raw.get("add") or "").strip(), raw.get("where") or ""
+            problem = ""
+            if not code.lower().startswith("<" + n["tag"]):
+                problem = f"The code must be the whole block, starting with its own <{n['tag']}> tag."
+            elif codeedit.tag_balance(code) != want:
+                problem = "The code opens or closes a different number of tags than the block: write the whole block, every tag closed."
+            else:
+                lost = domnode.lost_hooks(old, block, code)
+                if lost:
+                    problem = (f"The code lost {', '.join(lost)}: the page's script or CSS uses them. Keep them "
+                               "(on the same elements) and make the change.")
+            if not problem:
+                break
+            if attempt:
+                emit({"type": "note", "message": f"🧩 The block edit was left out: {problem}"})
+                return [], None
+            emit({"type": "note", "message": f"🧩 {problem} (asked again)"})
+            msgs = msgs + [{"role": "assistant", "content": json.dumps(raw, ensure_ascii=False)},
+                           {"role": "user", "content": problem}]
+        if code.strip() == block.strip() and not add:
+            if raw.get("why"):
+                emit({"type": "note", "message": f"🧩 No change to the block: {raw['why']}"})
+            return [], None
+        new = domnode.splice(old, n, code)
+        edits = [[block, code]]
+        if add:
+            at = {"head_end": "</head>", "body_end": "</body>"}.get(where) or (
+                "</head>" if add.lstrip().startswith("<style") else "</body>")
+            if new.count(at) == 1:
+                new = new.replace(at, add + "\n" + at, 1)
+                edits.append([at, add + "\n" + at])
+        if raw.get("why"):
+            emit({"type": "note", "message": f"🧩 {raw['why']}"})
+        return edits, new
+
+    def pick_node(self, pick):
+        """🎯 The block the user clicked on the preview, in the page's file as it is now: {"page", "node", "label",
+        "words"}, or None. The same file: its node number; a file changed since the preview: the block of that tag
+        with those words."""
+        if not isinstance(pick, dict) or not self.workspace.roots:
+            return None
+        root = Path(self.workspace.roots[0][1])
+        page = str(pick.get("page") or "index.html").split("?")[0].lstrip("/")
+        f = (root / page).resolve()
+        if root.resolve() not in f.parents or not f.is_file() or f.suffix.lower() not in (".html", ".htm"):
+            return None
+        text = f.read_text(encoding="utf-8")
+        nodes = domnode.index(text)
+        try:
+            n = int(pick.get("n"))
+        except (TypeError, ValueError):
+            n = None
+        tag = str(pick.get("tag") or "").lower()
+        if not (n in nodes and nodes[n]["tag"] == tag and str(pick.get("sig") or "") == domnode.signature(text)):
+            n = domnode.find_like(nodes, tag, pick.get("words"))
+        if n is None:
+            return None
+        return {"page": page, "node": n, "label": domnode._label(nodes[n]).split(" ")[0],
+                "words": domnode.all_words(nodes, n, 80)[:80], "line": nodes[n]["line"]}
+
+    def _plan_section_at(self, text, secs, line):
+        """The plan section (its number) whose part of the page holds this line, or -1."""
+        seen = {}
+        for k, x in enumerate(secs or []):
+            t = str(x.get("title") or "").strip().lower()
+            nth = seen.get(t, 0)
+            seen[t] = nth + 1
+            win = codeedit.section_window(text, x.get("title"), nth, pad=0) if t else None
+            if win and win[0] <= line <= win[1]:
+                return k
+        return -1
 
     def _line_edits(self, old, name, message, emit, focus=None):
         """SEARCH/REPLACE edits for one file (the coder; only the lines the request needs). focus: (section title, its
@@ -6630,7 +7719,9 @@ dialog = notify "popup"; back to top = to_top; reading bar = progress; numbers c
         if kit_css:  # a kit page: classes / APIs against the kit's own files, and the phone-width render
             found = webkit.kit_problems({"index.html": pages[-1]}, kit_css)
             try:
-                found_ux = webkit.ux_problems(browser.check(path, ux=True).get("ux"), {"index.html": pages[-1]})
+                ux_ = browser.check(path, ux=True).get("ux")
+                self._last_ux = ux_ or {}  # (its contrast colours: M42 fixes those itself, _own_line_fixes)
+                found_ux = webkit.ux_problems(ux_, {"index.html": pages[-1]})
             except (ToolError, OSError):
                 found_ux = {}
             problems += [q.replace("Fix in index.html: ", "") for ps in list(found.values()) + list(found_ux.values())

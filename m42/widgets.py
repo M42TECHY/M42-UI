@@ -153,6 +153,9 @@ def w_line_chart(sec, ctx, area=False):
         return w_metric_pair(dict(sec, items=[dict(i, value=(i.get("values") or [i.get("value")])[-1]) for i in items(sec, 4)]), ctx)
     n = max(len(v) for _, v in ss)
     labels = [str(x) for x in (sec.get("labels") or [])][:n] or guess_labels(sec, n)
+    cj = _chartjs(sec, ctx, "line", labels, ss)
+    if cj:
+        return cj
     # a ruler-straight line (20, 40, 60...: a real run's "Power consumption") is a made-up sample: given the ups
     # and downs a real reading has
     def lively(vals):
@@ -256,6 +259,9 @@ def w_bar_chart(sec, ctx):
         return head(sec)
     n = max(len(v) for _, v in ss)
     labels = [str(x) for x in (sec.get("labels") or [])][:n] or [str(i + 1) for i in range(n)]
+    cj = _chartjs(sec, ctx, "bar", labels, ss)
+    if cj:
+        return cj
     lo, hi, step = _scale([v for _, v in ss])
     groups = []
     style = look(sec).get("bars", "")
@@ -299,8 +305,21 @@ def _ring(pct, col, size=120, stroke=12, label=""):
             f'transform="rotate(-90 21 21)"/></svg><b>{e(label or f"{fmt(pct)}%")}</b></div>')
 
 
+def _chartjs(sec, ctx, kind, labels, ss):
+    """The chart drawn by Chart.js when the user named it (the user, 2026-11-17: "the JS the user asks for is used"):
+    a canvas with its data; m42-ui.js draws it in the theme's colours. "" when the page does not use Chart.js."""
+    if "chart.js" not in (ctx.get("libs") or ()):
+        return ""
+    cfg = {"type": kind, "labels": [str(x) for x in labels], "series": [{"name": str(n), "values": [num(v) for v in vals]} for n, vals in ss]}
+    return (head(sec) + f'<div class="m42-w-chartjs"><canvas data-m42-chartjs="{e(json.dumps(cfg, ensure_ascii=False))}" '
+            f'role="img" aria-label="{e(sec.get("title") or kind)}"></canvas></div>')
+
+
 def w_donut(sec, ctx):
     its = items(sec, 6)
+    cj = _chartjs(sec, ctx, "doughnut", [i.get("title") for i in its], [(sec.get("title") or "", [i.get("value") for i in its])]) if its else ""
+    if cj:
+        return cj
     total = sum(num(i.get("value")) for i in its) or 1
     acc, segs = 0, []
     for k, i in enumerate(its):

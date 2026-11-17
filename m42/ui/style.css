@@ -654,6 +654,10 @@ dialog::backdrop { background: rgba(8, 10, 16, .55); backdrop-filter: blur(3px);
 .pp-icon { color: color-mix(in srgb, var(--text, #222) 65%, transparent); }
 .pp-icon svg { display: block; }
 .pp-icon.busy { opacity: .45; pointer-events: none; }
+.pp-icon.on { background: color-mix(in srgb, #f43f5e 14%, transparent); border-color: #f43f5e; color: #f43f5e; }
+.attachment.pick { display: flex; align-items: center; gap: 6px; padding: 6px 26px 6px 10px; border: 1px solid #f43f5e; border-radius: 8px;
+  background: color-mix(in srgb, #f43f5e 8%, transparent); font-size: 13px; max-width: 320px; }
+.attachment.pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* the user's own message: light blue, calm and "knowledgeable" (the user, 2026-11-12: not the light red) */
 :root { --user-bg: #e8f1fd; }

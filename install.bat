@@ -42,7 +42,7 @@ set /p OK=Install them now? [Y/n]
 if /i "%OK%"=="n" ( echo Nothing was installed. & pause & exit /b 1 )
 "%VPY%" -m pip install --upgrade pip
 "%VPY%" -m pip install -r requirements.txt || ( echo The packages did not install: see the lines above. & pause & exit /b 1 )
-"%VPY%" -m pip install torch --index-url https://download.pytorch.org/whl/cpu || echo PyTorch did not install: the Tanglish speech model stays off.
+"%VPY%" -m pip install torch --index-url https://download.pytorch.org/whl/cpu || echo PyTorch did not install: the optional picture card finder stays off.
 
 echo.
 "%VPY%" m42\setup.py %*

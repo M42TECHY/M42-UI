@@ -60,9 +60,9 @@ ask "Install them now?" "$@" || { echo "Nothing was installed."; exit 1; }
 "$VPY" -m pip install --upgrade pip
 "$VPY" -m pip install -r requirements.txt
 if [ "$OS" = "Darwin" ]; then
-  "$VPY" -m pip install torch || echo "PyTorch did not install: the Tanglish speech model stays off."
+  "$VPY" -m pip install torch || echo "PyTorch did not install: Whisper small (English speech on a Mac) stays off."
 else
-  "$VPY" -m pip install torch --index-url https://download.pytorch.org/whl/cpu || echo "PyTorch did not install: the Tanglish speech model stays off."
+  "$VPY" -m pip install torch --index-url https://download.pytorch.org/whl/cpu || echo "PyTorch did not install: the optional picture card finder stays off."
 fi
 
 # the app window and the page checks need a Chromium browser (Chrome, Chromium, Edge or Brave)

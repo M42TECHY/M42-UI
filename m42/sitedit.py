@@ -143,7 +143,8 @@ def outline(site, budget=6000):
 
 def locate_schema(site, parts):
     files = [p["file"] for p in site["pages"]]
-    return {"type": "object", "properties": {"understood": {"type": "string", "maxLength": 260},
+    return {"type": "object", "properties": {"english": {"type": "string", "maxLength": 400},
+        "understood": {"type": "string", "maxLength": 260},
         "expected": {"type": "string", "maxLength": 260},  # (said before the changes: the 4B decides after reading)
         "changes": {"type": "array", "minItems": 1, "maxItems": 3, "items": {
         "type": "object", "properties": {
@@ -167,12 +168,26 @@ def locate_schema(site, parts):
         "required": ["page", "action", "section", "part", "position", "colors", "theme", "background", "size", "align", "items",
                      "items_at", "count", "scene_part", "name", "design", "what"]}},
         },
-        "required": ["understood", "expected", "changes"]}
+        "required": ["english", "understood", "expected", "changes"]}
+
+
+# how the user speaks (Tamil letters, Tanglish, speech to text): language knowledge for the 4B, never a rule in code;
+# shared by the locate step (it writes the request in English itself) and agent.TAMIL_TO_ENGLISH
+LANGUAGE = """The user's request about their web page is in Tamil (Tamil letters), Tanglish (Tamil in English
+letters: "venum" = I want it; "venam" / "venaam" / "vendam" / "venna" / "vena" = I do NOT want it, take it away; "podu" /
+"potu" = put; "maathu" = change; "illa" / "varala" = it is not there / not showing) or English, often by speech to text.
+When the page is given, read the request with it: a thing the page ALREADY HAS, named by the user, is rarely asked to be
+added again; they want it changed or taken away. In Tamil letters:
+Tamil words, and English words written in Tamil letters ("கோர்ஸ்" = course, "செக்ஷன்" = section, "கலர்" = colour,
+"ஹப்" = hub, "லெட்டர்" = letter, "அனிமி ஜேஎஸ்" / "அனிமே ஜேஎஸ்" = anime.js, a library's name). Sounds made while
+thinking ("ஆஹ்", "அஹ்", "உம்", "ஆ") are not words: leave them out. Edit words: "ஸ்வாப்" / "சுவாப்" / "சஇ" / "இடம்
+மாத்து" = swap (two things change places, never "combine" or "merge"); "ரிமூவ்" / "நீக்கு" / "தூக்கு" / "வேணாம்" / "வேணா" / "வேண்ணா" = remove (do not want it);
+"மேல" = above / first, "கீழ" = below / after; "பட்டன்" = button; "கிராஃப்" / "கிராப்" = graph; "அனிமேஷன்" = animation. In Tamil the new value comes right before "-னு / -ன்னு / -nu" and the verb after it ("X-னு மாத்து" =
+"change it to X"; "X அப்படின்னு இருக்கற Y" = "the Y that says X")."""
 
 
 LOCATE_PROMPT = """A website was built from plans; the user now asks for a change. Find WHERE it goes and WHAT kind of
-change it is. The site (each page's sections, numbered from 0):
-{outline}
+change it is. The site (each page's sections, numbered from 0) is given with the request, after these rules.
 
 Words that SAY what is wrong ("menu overlay aguthu", "text cut aaguthu", "card sariya illa", "overlap aaguthu",
 "varala") are a problem to fix on the page as it is, never something to add.
@@ -223,7 +238,7 @@ Answer {{"changes": [...]}}, one entry per separate change (most requests are on
   CSS, style, colours inside it, spacing, how things inside it line up ("table css sariya varala", "cards align
   aagala"): the content stays, so not edit_section or change_widget.
 - section: the section's number on that page (-1 when none). "this / that / same section", "intha / antha section"
-  is the one changed last{last}; so is a follow-up that names no section ("innum 3 add pannu", "add 3 more", "one more").
+  is the one changed last (named with the site, when there is one); so is a follow-up that names no section ("innum 3 add pannu", "add 3 more", "one more").
 - part: for add_section / change_widget, else "".
 - items: for edit_section, what happens to the section's items: "add" (new ones next to the ones there: "innoru point
   add pannu", "3 more"), "remove" (some taken away), "change" (their words or numbers), "" (no item changes).
@@ -243,6 +258,13 @@ their names and prices still there"; "The 'Bestsellers' rows come in one after a
 rest of the page"). M42 looks at the page after the change and checks it against this."""
 
 
+LOCATE_LANGUAGE = """
+
+First of all, english: the request written in plain English, the same meaning, nothing added (names and the
+words to put on the page stay as written, in quotes). The user's language:
+""" + LANGUAGE
+
+
 def last_note(site):
     """ (page, section) the last edit changed: "intha section" in the next request means it."""
     la = site.get("last") or {}
@@ -260,7 +282,17 @@ def locate_messages(site, message, shot=None):
     if shot:
         ask = [{"type": "text", "text": ask + "\nThe user's screenshot of the page as it looks now:"},
                {"type": "image_url", "image_url": {"url": shot}}]
-    return [{"role": "system", "content": LOCATE_PROMPT.format(outline=outline(site), last=last_note(site)).replace(
+    # ⚡ the rules first, the same for every edit, the site and the request after them: llama-server keeps the rules'
+    # tokens in its prompt cache (--cache-ram), so they are not read again (2026-11-16: the site map at the top made
+    # all 3,250 tokens new each edit, 29 s before the first word; measured with it at the end: 1,872 cached, 8.6 s)
+    site_text = f"The site (each page's sections, numbered from 0):{chr(10)}{outline(site)}"
+    last = last_note(site)
+    site_text += f"{chr(10)}The section changed last{last}." if last else ""
+    if isinstance(ask, list):
+        ask[0]["text"] = site_text + chr(10) + chr(10) + ask[0]["text"]
+    else:
+        ask = site_text + chr(10) + chr(10) + ask
+    return [{"role": "system", "content": (LOCATE_PROMPT + LOCATE_LANGUAGE).replace("{{", "{").replace("}}", "}").replace(
         "THEMES_LIST", "; ".join(f"{n} ({t['desc'][:60]})" for n, t in (themes.APP_THEMES if themes.is_app((site.get("look") or {}).get("design")) else themes.THEMES).items()))},
             {"role": "user", "content": ask}]
 
@@ -413,6 +445,12 @@ def describe_change(site, ch):
     if act == "motion":
         return f"add motion to {title(k)}: {what}"
     return f"a small change on the page: {what}"
+
+
+def _compact(text):
+    """Words compared as written, letters and digits only ("Shop Now" = "shop now" = "SHOP-NOW"): a comparison, not a
+    word list (it was dropped with the word rules on 2026-11-16 and the button rename broke)."""
+    return re.sub(r"[\W_]+", "", str(text or "")).lower()
 
 
 def page_buttons(html):
@@ -593,6 +631,15 @@ def apply(site, ch, new_section=None):
         # (one colour asked: it leads, the page's own others follow; "#ea580c" three times flattened the look, 2026-11-16)
         if cols:
             lk["colors"] = (cols + [c for c in lk.get("colors") or [] if c.lower() not in {x.lower() for x in cols}])[:3]
+            # the colours the user named for the page are now THESE (the first request's "named colours" were read
+            # before the look's and put first: "theme color light blue" changed nothing, twice, 2026-11-17)
+            import webkit
+            for p in site["pages"]:
+                it = (p.get("spec") or {}).get("intent")
+                if isinstance(it, dict) and "named_colours" in it:
+                    it["named_colours"] = list(lk["colors"])
+            if "named_colours" in webkit.INTENT:
+                webkit.INTENT["named_colours"] = list(lk["colors"])
         if ch.get("theme") in ("light", "dark"):
             lk["theme"] = ch["theme"]
             if lk.get("bg"):  # the old page background belonged to the other theme
@@ -648,9 +695,20 @@ def carry_edits(rendered, current, context=2):
     for group in difflib.SequenceMatcher(None, a, b, autojunk=False).get_grouped_opcodes(context):
         i1, i2, j1, j2 = group[0][1], group[-1][2], group[0][3], group[-1][4]
         search, replace = "".join(a[i1:i2]), "".join(b[j1:j2])
-        if search.strip():
+        # (not inside M42's theme block: it is written from the site's look on every redraw; a hand edit of it, carried
+        # over, put the old colour back over the user's new "light blue", 2026-11-17)
+        if search.strip() and 'id="m42-theme"' not in search and not _in_theme_block(rendered, search):
             out.append([search, replace])
     return out
+
+
+def _in_theme_block(page, text):
+    """Is this text (a few lines of the page) inside its <style id="m42-theme"> block?"""
+    m = re.search(r'<style id="m42-theme">.*?</style>', page or "", re.S)
+    if not m:
+        return False
+    at = (page or "").find(text.strip()[:200])
+    return at >= 0 and m.start() <= at < m.end()
 
 
 def content_text(site, limit=1800):

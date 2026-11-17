@@ -63,6 +63,63 @@ PLAN_SCHEMA = {"type": "object", "properties": {
     "footer": {"type": "string", "maxLength": 90}},
     "required": ["brand", "hero", "sections", "footer"]}
 
+
+def _no_icons(schema):
+    """The plan's schema without the items' and the brand's icon: agent._pick_icons decides every icon after the plan
+    (one call for the page), so the plan's own ~130 tokens of icon names were written for nothing (2026-11-16)."""
+    import copy
+    s = copy.deepcopy(schema)
+    s["properties"]["sections"]["items"]["properties"]["items"]["items"]["properties"].pop("icon", None)
+    brand = s["properties"]["brand"]
+    brand["properties"].pop("icon", None)
+    brand["required"] = [k for k in brand["required"] if k != "icon"]
+    return s
+
+
+PLAN_SCHEMA_NO_ICONS = _no_icons(PLAN_SCHEMA)
+
+
+def bound_names(spec):
+    """The spec's sections' names, each once (a second "menu" is "menu (2)"): what the plan's sections are bound to.
+    [] when the plan is free (no spec sections, a reference's grid, one part)."""
+    rows = [x for x in (spec or {}).get("sections") or [] if isinstance(x, dict)]
+    if not rows or (spec or {}).get("ref_grid") or (spec or {}).get("only_part"):
+        return []
+    names, seen = [], {}
+    for x in rows:
+        nm = " ".join(str(x.get("name") or x.get("part") or "section").split())[:40]
+        seen[nm] = seen.get(nm, 0) + 1
+        names.append(nm if seen[nm] == 1 else f"{nm} ({seen[nm]})")
+    return names
+
+
+def bound_schema(base, names):
+    """🧩 The plan's schema with exactly one section per spec section, each saying which one it is ("for", first): the
+    4B wrote 9 sections for 7 one run and 6 another (a menu twice, Location never), and each section took the part
+    of the spec row at its POSITION, so every part after a slip was another's (2026-11-17)."""
+    if not names:
+        return base
+    import copy
+    s = copy.deepcopy(base)
+    sec = s["properties"]["sections"]
+    sec["minItems"] = sec["maxItems"] = len(names)
+    item = sec["items"]
+    item["properties"] = {"for": {"type": "string", "enum": names}, **item["properties"]}
+    item["required"] = ["for"] + [k for k in item["required"] if k != "for"]
+    return s
+
+
+def bind_sections(raw, names):
+    """The plan's sections put in the spec's order by their "for" (a second one for the same row left out).
+    Returns (the sections, one per name or None where none was written)."""
+    out = [None] * len(names)
+    for sec in (raw or {}).get("sections") or []:
+        if isinstance(sec, dict) and sec.get("for") in names:
+            i = names.index(sec["for"])
+            if out[i] is None:
+                out[i] = {k: v for k, v in sec.items() if k != "for"}
+    return out
+
 PLAN_PROMPT = """You write the CONTENT of a web page as JSON; M42 builds the page from it with its own premium
 templates, so you only decide what each part says and holds. Follow the page's spec (its sections in order, its
 hero kind). Make it feel like a real, busy site of this kind: specific names, places, times, prices, counts,
@@ -1414,6 +1471,9 @@ def clean(plan, spec):
             part = want
             s["_flow"] = (((spec or {}).get("sections") or [])[n] or {}).get("flow") or {}
         sp = ((spec or {}).get("sections") or [])
+        if n < len(sp) and isinstance(sp[n], dict) and sp[n].get("asked_part") and want:
+            part = want  # 🧩 the user asked for THIS part (a "Chart.js bar chart of sales"): theirs first; it became a
+            s["_asked_part"] = True  # stats row, then photo cards, then a rating block, and no chart (2026-11-17)
         if n < len(sp) and isinstance(sp[n], dict) and sp[n].get("role"):  # 🧩 its role in the page's flow (its blocks follow it)
             s["_role"] = sp[n]["role"]
         if n < len(sp) and isinstance(sp[n], dict) and sp[n].get("slot"):  # 🦴 its place in the app's skeleton (row, column)
@@ -2358,6 +2418,8 @@ def render(plan, spec, theme, request="", pages=None, current="index.html"):
     PRICE_X = rupee_scale(plan, request) if CURRENCY == "₹" else 1
     assign_icons(plan, request)
     ids, ctx = set(), {}
+    # the libraries the user named (agent: their asks), by npm name: a part that has a way to use one, uses it
+    ctx["libs"] = {str(l.get("npm") or "").lower() for l in (spec or {}).get("libraries") or [] if isinstance(l, dict)}
     hero_kind = (spec or {}).get("hero") or ("search" if (plan["hero"].get("fields")) else "split")
     if (hero_kind == "compact" and current == "index.html" and widgets.photo(plan["hero"]) and not webkit.app_asked(request)
             and (spec or {}).get("ref_layout") != "sidebar"):

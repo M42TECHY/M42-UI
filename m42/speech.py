@@ -28,11 +28,10 @@ MODELS = ROOT / "models"
 # (turbo, large-v3-turbo, was taken out: ~15 s for 5 s on a CPU; the user, 2026-11-13: "small and IndicConformer only")
 WHISPER = {"small": (MODELS / "ggml-small-q5_1.bin", 8179)}
 INDIC = MODELS / "indicconformer"
-# Whisper models from Hugging Face run by transformers on the CPU (the user, 2026-11-13: "a Tanglish fine-tune, compare
-# it"): Badri0510/whisper-tanglish-100hr-production, Whisper base size, ~1 s for 5 s
-HF = {"tanglish": (MODELS / "whisper-tanglish-badri", "Whisper Tanglish (test): base size, Badri0510's Tanglish fine-tune"),
-      # a Mac (no whisper-server build): Whisper small itself, in Python (firstrun.py downloads it there)
-      "small-py": (MODELS / "whisper-small", "Whisper small: every language (English best)")}
+# Whisper from Hugging Face, run by transformers on the CPU: a Mac (no whisper-server build) gets Whisper small itself
+# (firstrun.py downloads it there). (2026-11-17, the user tried them all: "IndicConformer Tamil for Tamil, Whisper small
+# for English; take the rest away": the Whisper Tanglish fine-tune (WER 52%) and Gemma 4 E2B (~4-8 s a phrase) went.)
+HF = {"small-py": (MODELS / "whisper-small", "Whisper small: every language (English best)")}
 NAMES = {"ta": "Tamil", "ml": "Malayalam", "kn": "Kannada", "hi": "Hindi", "te": "Telugu", "en": "English"}
 LANGUAGES = {"auto", "ta", "en", "hi", "ml", "kn", "te"}
 
@@ -74,6 +73,11 @@ def _alive(port):
 def start(engine=None, wait=True, timeout=120):
     """The engine ready (a whisper-server started with its model, or IndicConformer loaded). True when ready."""
     engine = _pick(engine)
+    if engine.startswith("indic-") or engine in HF:  # (another engine chosen: Whisper's server stopped, its RAM back)
+        with _lock:
+            for other, q in list(_procs.items()):
+                if q.poll() is None:
+                    q.terminate()
     if engine.startswith("indic-"):
         return _indic_rec(engine[6:]) is not None
     if engine in HF:
@@ -256,8 +260,9 @@ def voice_only(wav):
     return b.getvalue(), round(len(y) / 16000, 2)
 
 
-def transcribe(wav, language="auto", prompt="", engine=None):
-    """The words in a WAV (16 kHz mono, as the app records it), only its speech (voice_only). Returns (text, seconds)."""
+def transcribe(wav, language="auto", prompt="", engine=None, best=False):
+    """The words in a WAV (16 kHz mono, as the app records it), only its speech (voice_only). Returns (text, seconds).
+    prompt: the words said before it (context for Whisper); best: a finished phrase (read more carefully than a draft)."""
     engine = _pick(engine)
     if not start(engine):
         raise RuntimeError("the speech model could not be started")
@@ -286,14 +291,21 @@ def transcribe(wav, language="auto", prompt="", engine=None):
         if rate != 16000:  # (the app records 16 kHz; anything else made so)
             import numpy as np
             x = np.interp(np.linspace(0, len(x), int(len(x) * 16000 / rate), endpoint=False), np.arange(len(x)), x).astype("float32")
+        # (2026-11-16, "Tanglish is often wrong": a finished phrase is read with 4 beams, a draft stays greedy and fast.
+        # The words said before are NOT given as a prompt here: tried, this fine-tune (trained without prompts) wrote
+        # the prompt back and made words up after it ("Sister" "Sister"...); whisper.cpp's Whisper small takes it)
+        extra = {"num_beams": 4} if best else {}
         with torch.no_grad():
             out = model.generate(proc(x, sampling_rate=16000, return_tensors="pt").input_features, max_new_tokens=220,
-                                 return_dict_in_generate=True, output_scores=True)
+                                 return_dict_in_generate=True, output_scores=True, **extra)
         text = " ".join(proc.batch_decode(out.sequences, skip_special_tokens=True)[0].split())
         try:  # the model's own sureness: words made up from music or noise come with a low one (the user, 2026-11-13:
             # "[Music] [Music]", "9:00-ல 9:00" from the room's sounds)
-            lp = model.compute_transition_scores(out.sequences, out.scores, normalize_logits=True)[0]
-            sure = float(lp[torch.isfinite(lp)].mean()) if len(lp) else 0.0
+            if extra.get("num_beams") and getattr(out, "sequences_scores", None) is not None:
+                sure = float(out.sequences_scores[0])  # (beams: their own mean log-probability)
+            else:
+                lp = model.compute_transition_scores(out.sequences, out.scores, normalize_logits=True)[0]
+                sure = float(lp[torch.isfinite(lp)].mean()) if len(lp) else 0.0
         except Exception:
             sure = 0.0
         return ("" if sure < HF_SURE else clean(text)), round(time.time() - t, 2)

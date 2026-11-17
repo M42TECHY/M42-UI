@@ -24,3 +24,5 @@ benchmark/
 .claude/
 # test scratch output
 m42/tests/_work/
+# the running app's local address and session token
+m42/.running-*.json

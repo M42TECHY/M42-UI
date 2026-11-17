@@ -3732,3 +3732,6 @@ svg.m42-b-mini path { fill: none; stroke: rgb(var(--t)); stroke-width: 3; vector
 /* a long hero heading, whatever the hero and its theme: smaller, so it takes 2-3 lines, not 5 (2026-11-16) */
 .m42-ui .m42-hero h1.is-long:not(#m42-x) { font-size: clamp(2.1rem, 4.2vw, 3.5rem); line-height: 1.08; }
 .m42-ui .m42-hero .m42-hp-title.is-long:not(#m42-x) { font-size: clamp(2.3rem, 5vw, 4rem); }
+
+/* a chart drawn by Chart.js (the user named it, 2026-11-17) */
+.m42-w-chartjs { position: relative; height: 260px; }
