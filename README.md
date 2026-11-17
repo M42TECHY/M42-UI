@@ -15,7 +15,7 @@
 
 <img src="docs/screenshots/electronics-3d-landing.gif" alt="VoltHub, a 3D landing page built by M42 UI, with its 3D scene playing" width="90%">
 
-<sub>VoltHub: a 3D landing page M42 UI built from one request, in about 12 to 18 minutes on an ordinary 16 GB PC.</sub>
+<sub>VoltHub: a 3D landing page M42 UI built from one request, in about 15 minutes on my 16 GB PC, CPU only.</sub>
 
 </div>
 
@@ -43,8 +43,9 @@ for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s
 
 ## <img src="docs/icons/images.svg" width="30" height="30" alt="" align="top"> What it builds
 
-Real pages built by M42 UI on a 16 GB PC (Ryzen 5 5600G), shown as they came out. Each one
-took **about 12 to 18 minutes** to build, from the request to the finished page.
+Real pages built by M42 UI on my PC (Ryzen 5 5600G, 16 GB RAM, **no graphics card**), shown as they came out.
+Each one took **12 to 18 minutes** (about 15 on average) from the request to the finished page. With a graphics
+card the model runs on the card, so a build can be faster.
 
 <table>
   <tr>
@@ -68,6 +69,38 @@ took **about 12 to 18 minutes** to build, from the request to the finished page.
 <a href="https://www.youtube.com/@M42TECH"><img src="docs/social/youtube.svg" alt="YouTube: @M42TECH" width="260"></a>&nbsp;
 <a href="https://www.instagram.com/muthupandi20"><img src="docs/social/instagram.svg" alt="Instagram: @muthupandi20" width="260"></a>&nbsp;
 <a href="https://m42tech.in"><img src="docs/social/website.svg" alt="Website: m42tech.in" width="260"></a>
+
+</div>
+
+## <img src="docs/icons/heart.svg" width="30" height="30" alt="" align="top"> Support M42 UI
+
+M42 UI is free, and I build it on my own time, on an ordinary PC like yours.
+
+If it helped you, saved you time, or you simply like what it does, a small donation means a lot. It tells me
+this work is useful to someone, and that keeps me going: more projects like this one, more kinds of pages,
+better 3D, and a faster app on everyday PCs. Every coffee turns into the next feature.
+
+Thank you for being part of it.
+
+<div align="center">
+
+**From anywhere in the world**
+
+<a href="https://buymeacoffee.com/muthupandit"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" width="260"></a>
+
+pay by card, from any country
+
+<br>
+
+**From India (UPI)**
+
+<img src="docs/upi-qr.webp" alt="UPI QR code: muthupandi0297@oksbi" width="200">
+
+`muthupandi0297@oksbi`
+
+<br>
+
+<img src="docs/icons/star.svg" width="18" height="18" alt=""> Not able to donate? A star on this repository helps others find it.
 
 </div>
 
@@ -180,7 +213,8 @@ You can always choose the other one.
    - llama-server for this system (llama.cpp's release: Vulkan on Windows / Linux for any graphics card, Metal on
      a Mac, the CPU build as the fallback);
    - the model and its picture reader (Hugging Face, GGUF);
-   - speech: Whisper small (every language), the Whisper Tanglish test model and the voice detector.
+   - speech: IndicConformer Tamil (Tamil and Tanglish, typed live as you speak), Whisper small (English and every
+     language) and the voice detector.
 
    Each file is checked by its size and SHA-256, and a broken download resumes when you run it again.
 5. Makes the launcher and starts M42 UI.
@@ -222,38 +256,6 @@ M42-UI/
   .venv/        the installer's Python environment
   knowledge/    the UIGEN-T2 examples index (optional, not in the repository)
 ```
-
-## <img src="docs/icons/heart.svg" width="30" height="30" alt="" align="top"> Support M42 UI
-
-M42 UI is free, and I build it on my own time, on an ordinary PC like yours.
-
-If it helped you, saved you time, or you simply like what it does, a small donation means a lot. It tells me
-this work is useful to someone, and that keeps me going: more projects like this one, more kinds of pages,
-better 3D, and a faster app on everyday PCs. Every coffee turns into the next feature.
-
-Thank you for being part of it.
-
-<div align="center">
-
-**From anywhere in the world**
-
-<a href="https://buymeacoffee.com/muthupandit"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" width="260"></a>
-
-pay by card, from any country
-
-<br>
-
-**From India (UPI)**
-
-<img src="docs/upi-qr.webp" alt="UPI QR code: muthupandi0297@oksbi" width="200">
-
-`muthupandi0297@oksbi`
-
-<br>
-
-<img src="docs/icons/star.svg" width="18" height="18" alt=""> Not able to donate? A star on this repository helps others find it.
-
-</div>
 
 ## Licence
 
