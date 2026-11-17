@@ -2333,6 +2333,17 @@ FOOT_CUT_RX = re.compile(r"(?:©|\(c\)|copyright)\s*\d{0,4}|all rights reserved\
                          r"\b(?:19|20)\d\d\b", re.I)
 
 
+def model_credits(plan):
+    """The 3D scene's CC BY 4.0 credit line (the optional 3D pack's models, Polyfork), or ""."""
+    sc = plan.get("scene3d") if isinstance(plan.get("scene3d"), dict) else {}
+    cred = [c for c in sc.get("credits") or [] if isinstance(c, dict) and c.get("name") and c.get("url")]
+    if not cred:
+        return ""
+    links = ", ".join(f'<a href="{e(c["url"])}" target="_blank" rel="noopener">{e(c["name"])}</a>' for c in cred[:8])
+    return (f'<span class="m42-credits" style="font-size:.78rem;opacity:.7">3D models: {links} by Polyfork, '
+            '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></span>')
+
+
 def site_footer(plan, secs, pages, current, social, short=None):
     """A site's footer: the brand with its line and the social links, the page's sections (or the site's pages), a
     contact column from the plan's own contact details, and the year (the 4B wrote "© 2023 ... | Privacy Policy |
@@ -2361,7 +2372,8 @@ def site_footer(plan, secs, pages, current, social, short=None):
             f'<div class="col-6 col-lg-4"><h5>{"Contact" if contact else "Company"}</h5><ul>{contact or legal}</ul></div>')
     return (f'<footer class="m42-footer is-site"><div class="container"><div class="row g-4">{cols}</div>'
             f'<div class="m42-foot-end"><span>© {datetime.date.today().year} {e(brand.get("name"))}. All rights reserved.</span>'
-            + (f'<span><a href="#">Privacy</a> · <a href="#">Terms</a></span>' if contact else "") + "</div></div></footer>")
+            + (f'<span><a href="#">Privacy</a> · <a href="#">Terms</a></span>' if contact else "") + model_credits(plan)
+            + "</div></div></footer>")
 
 
 MOTION = {"level": ("none", "subtle", "lively"), "hero": ("none", "fade", "words", "slide"),
@@ -2705,7 +2717,7 @@ def render(plan, spec, theme, request="", pages=None, current="index.html"):
               '<a href="#" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a></span>')
     footer = (f'<footer class="m42-footer"><div class="container d-flex justify-content-between flex-wrap gap-3">'
               f'<span><i class="bi {icon(brand.get("icon"))}"></i> {e(brand.get("name"))} · {e(plan.get("footer"))}</span>'
-              f'{social}</div></footer>')
+              f'{social}{model_credits(plan)}</div></footer>')
     if layout == "site" and len(secs) >= 3:
         footer = site_footer(plan, secs, pages, current, social, short)
     feeds = ""

@@ -235,5 +235,38 @@ check("all-inside: the sales section drawn as the chart asked", next(r for r in 
       [(r["name"], r["part"]) for r in out5])
 check("all-inside: each ask once in its section", [r.get("asks") for r in out5] == [["Menu"], ["Sales Chart"], ["Gallery"]], [r.get("asks") for r in out5])
 
+# 🩹 links to files the folder does not have: taken out, for any page
+root_ = Path(tempfile.mkdtemp())
+(root_ / "js").mkdir()
+(root_ / "js" / "app.js").write_text("x")
+PAGE_L = ('<html><head><link rel="stylesheet" href="lib/m42-ui.css"><link rel="stylesheet" href="css/nope.css"></head><body>'
+          '<script src="m42-cart.js"></script>\n<script src="js/app.js"></script>\n<script src="js/app.js"></script>\n'
+          '<script src="https://cdn.example/x.js"></script>\n</body>\n</html>\n<script src="m42-cart.js"></script>')
+mended, gone_ = webkit.mend_refs(PAGE_L, root_)
+check("refs: a missing file's script and stylesheet taken out", "m42-cart.js" not in mended and "nope.css" not in mended, gone_)
+check("refs: the kit, a real file and the web kept", all(x in mended for x in ("lib/m42-ui.css", "js/app.js", "https://cdn.example/x.js")))
+check("refs: a script linked twice, once", mended.count("js/app.js") == 1)
+check("refs: nothing after </html>", mended.rstrip().endswith("</html>"))
+
+# ★ in an app's column: the main tool, then the work, then what helps it (any kind)
+import appflows  # noqa: E402
+
+
+def fake6(base, model, msgs, schema, **k):
+    if "asks" in schema["properties"]:
+        return {"asks": [{"item": "Cart", "place": "Current bill", "part": "", "name": "", "what": ""},
+                         {"item": "Footer", "place": "FRAME", "part": "", "name": "", "what": ""}], "main": "", "libraries": []}, {}
+    return {}, {}
+
+
+llm.complete_json = fake6
+pos_ = ag._skeleton_spec("a POS", {"items": [{"name": "Cart", "shows": "bill"}, {"name": "Footer", "shows": "links"}]},
+                         appflows.skeleton("pos"), emit, None, "r")
+left = [s["part"] for s in pos_["sections"] if s["slot"] == [0, 0]]
+check("column: the products first, filters and the day's numbers under them", left == ["image_cards", "category_chips", "kpi_tiles"], left)
+check("column: the layout says the same order", pos_["app_layout"][0][0]["parts"] == left)
+check("app asks: each ask kept with its section, the frame's too",
+      next(s for s in pos_["sections"] if s["part"] == "invoice").get("asks") == ["Cart"] and pos_.get("frame_items") == ["Footer"])
+
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)

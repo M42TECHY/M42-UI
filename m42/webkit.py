@@ -42,7 +42,10 @@ KIT = [
     # 3D scenes (only on a page whose request asked for 3D: data-m42-3d): three.js r128 (MIT) and M42's own 3D kit
     {"name": "three.js r128", "css": [], "js": ["three.min.js"], "use": r"data-m42-3d", "global": "THREE"},
     # a model file in the scene (the user's .glb / .stl, or one found online): three.js's own loaders (r128, MIT)
-    {"name": "three.js GLTFLoader", "css": [], "js": ["GLTFLoader.js"], "use": r"&quot;model&quot;:\s*&quot;[^&]*\.gl(?:b|tf)&quot;",
+    # (and the bundled / 3D pack models a scene uses: "models": {"cup": "models/lib/....glb"}; without this the loader
+    # was left off and those things were never drawn, 2026-11-17)
+    {"name": "three.js GLTFLoader", "css": [], "js": ["GLTFLoader.js"],
+     "use": r"&quot;model&quot;:\s*&quot;[^&]*\.gl(?:b|tf)&quot;|&quot;models&quot;:\s*\{[^}]*\.glb&quot;",
      "needs": "three.min.js"},
     {"name": "three.js STLLoader", "css": [], "js": ["STLLoader.js"], "use": r"&quot;model&quot;:\s*&quot;[^&]*\.stl&quot;",
      "needs": "three.min.js"},
@@ -1162,6 +1165,51 @@ def chat_note(request, theme, spec=None):
 def file_note(request, spec=None):
     """The kit rules for one file of a built site: Bootstrap & co., M42 UI, and its live-data parts for a dashboard."""
     return FILE_NOTE + "\n" + UI_NOTE + live_note(request) + ("\n" + dash_note(spec) if live_kind(request) != "none" else "")
+
+
+LOCAL_REF_RX = re.compile(r'[ \t]*<script\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>\s*</script>[ \t]*\n?'
+                          r'|[ \t]*<link\b[^>]*\bhref=["\']([^"\']+)["\'][^>]*>[ \t]*\n?', re.I)
+
+
+def mend_refs(html, root):
+    """🩹 A page's own file links made true, for any page (no model): a <script src> / <link href> to a file of the
+    folder that does not exist is taken out (a rules edit linked "m42-cart.js" four times, a file nobody wrote: four
+    404s, 2026-11-17), the same script linked twice is linked once, and what was written after </html> goes before
+    </body>. A link to the web, to the kit (lib/, copied when the page is saved) or to a file there is kept.
+    Returns (html, [what was taken out])."""
+    text, out = str(html or ""), []
+    low = text.lower()
+    end = low.rfind("</html>")
+    if end >= 0 and text[end + 7:].strip():  # (after the page's end: put inside it)
+        tail, text = text[end + 7:].strip(), text[:end + 7]
+        b = text.lower().rfind("</body>")
+        text = (text[:b] + tail + "\n" + text[b:]) if b >= 0 else text
+    seen = set()
+
+    def keep(m):
+        url = (m.group(1) or m.group(2) or "").strip()
+        tag = m.group(0)
+        if m.group(2) is not None and not re.search(r'rel=["\']?stylesheet', tag, re.I):
+            return tag  # (a link that is no stylesheet: an icon, a preload: not ours to judge)
+        path = url.split("?")[0].split("#")[0]
+        if not path or re.match(r"^(?:[a-z]+:|//|data:|#)", path, re.I):
+            key = url
+        else:
+            rel = path.lstrip("./").lstrip("/")
+            there = Path(root) / rel if root else None
+            kit = rel.startswith("lib/") and rel[4:] in KIT_FILES
+            if not kit and not (there and there.is_file()) and root:
+                out.append(f"{rel} (no such file)")
+                return ""
+            key = rel
+        if m.group(1) is not None:
+            if key in seen:
+                out.append(f"{key} (linked again)")
+                return ""
+            seen.add(key)
+        return tag
+    text = LOCAL_REF_RX.sub(keep, text)
+    return text, out
 
 
 def localize(html, folder):

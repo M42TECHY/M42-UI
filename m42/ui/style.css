@@ -416,6 +416,17 @@ body.dropping::after { content: "📄 Drop PDF, Word, text or screenshots here";
   gap: 14px; align-items: center; padding: 12px 16px; border-radius: 12px; background: #1f2937; color: #fff; font-size: 14px;
   box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .5); }
 .m42-setup-note button { border: 0; border-radius: 8px; padding: 6px 14px; background: #fff; color: #1f2937; font-weight: 700; cursor: pointer; }
+.m42-setup-ask { flex-wrap: wrap; max-width: min(720px, calc(100vw - 32px)); }
+.m42-setup-ask > b, .m42-setup-ask > span { flex-basis: 100%; }
+.m42-setup-err { color: #fecaca; }
+.m42-setup-where { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.m42-setup-where label { font-weight: 600; }
+.m42-setup-where input { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid #4b5563; background: #111827; color: #fff; font: inherit; }
+.m42-setup-where code { color: #c7d2fe; }
+.m42-setup-drives { display: flex; flex-wrap: wrap; gap: 6px; }
+.m42-setup-note .m42-drive { background: #374151; color: #fff; font-weight: 600; padding: 4px 10px; font-size: 13px; }
+.m42-setup-note .m42-drive.on { background: #fff; color: #1f2937; }
+.m42-setup-note .m42-drive.short { opacity: .45; cursor: not-allowed; text-decoration: line-through; }
 
 /* =================== premium skin (2026-11-12: "the UI is too plain") =================== */
 ::selection { background: rgba(139, 92, 246, .3); }

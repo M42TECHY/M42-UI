@@ -7,6 +7,8 @@ will download with the sizes, asks, downloads, makes the launcher, and starts th
     python m42/setup.py --tier 2b    the 2B whatever the PC (or --tier 4b)
     python m42/setup.py --no-speech  no speech models (the mic button stays off)
     python m42/setup.py --no-start   do not start the app at the end
+    python m42/setup.py --3d-pack    the optional 3D pack too (~120 MB; asked, "no" by default)
+    python m42/setup.py --models-dir E:/M42-models   where the models go (asked otherwise, once on a PC)
 Only the standard library is used here (firstrun.py)."""
 import argparse
 import os
@@ -20,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import firstrun  # noqa: E402
+import places  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 GB = 2 ** 30
@@ -43,7 +46,8 @@ def size(n):
 def show_pc(info):
     print(f"\n  System   {info['system']} ({info['arch']})")
     print(f"  Memory   {info['ram_gb']:g} GB RAM")
-    print(f"  Disk     {info['free_gb']:g} GB free where the models go ({firstrun.MODELS})")
+    print("  Disks    " + ", ".join(f"{d['label']} {d['free_gb']:g} GB free" + (" (this app)" if d["app"] else "")
+                                  for d in places.drives()))
     print(f"  CPU      {info['cores']} threads")
     cards = info["gpus"]
     if cards:
@@ -91,12 +95,72 @@ def make_launcher():
     return f
 
 
+def three_d_pack(a):
+    """📦 The optional 3D pack (pack3d.py): asked, "no" by default (the user, 2026-11-17: "whoever needs it downloads
+    it, else it stays out"); --3d-pack says yes, --no-3d-pack no."""
+    import pack3d
+    if pack3d.status()["installed"] or a.no_3d_pack:
+        return
+    print(f"\n  3D pack  about {pack3d.SIZE_MB} MB: ~850 free low-poly models (restaurant, hospital, office, lab, hotel,"
+          "\n           city, cars, farm...) for the 3D landing pages. Polyfork, CC BY 4.0. Optional: the app works without it.")
+    if not (a.three_d_pack or ask("  Download the 3D pack too?", a.yes, default=False)):
+        print("  (Later: python m42/pack3d.py install)")
+        return
+    try:
+        st = pack3d.install(pack3d._bar)
+        print(f"\n  3D pack ready: {st['models']} models.")
+    except (OSError, RuntimeError) as e:
+        print(f"\n  The 3D pack did not download ({e}). Later: python m42/pack3d.py install")
+
+
+def choose_folder(a, tier):
+    """📦 Before anything downloads: how much room it needs, and where the models go (the user, 2026-11-17: "the ZIP
+    is in Downloads on C:; the models must not fill C:"). Asked once on a PC; --models-dir answers it."""
+    need, _ = firstrun.space(firstrun.plan_in(places.DEFAULT) if not a.models_dir else firstrun.plan_in(a.models_dir))
+    room = need + places.MARGIN
+    folder, enough = places.suggest(need)
+    print(f"\n  Space    the models need about {size(room)} free ({size(need)} of files + {size(places.MARGIN)} room "
+          "while they download).")
+    for d in places.drives():
+        ok = d["free_gb"] * GB >= room
+        print(f"           {d['label']:4} {d['free_gb']:>7g} GB free  {'ok' if ok else 'too small'}"
+              + ("  (this app)" if d["app"] else "") + (f"  -> {d['folder']}" if ok else ""))
+    if a.models_dir:
+        folder = a.models_dir
+    elif not a.yes:
+        try:
+            got = input(f"  Where should the models go? [Enter = {folder}] ").strip().strip('"')
+        except EOFError:
+            got = ""
+        folder = got or folder
+    elif not enough:
+        print("  No drive has the room for the models: free some space and run this again.")
+        return 1
+    while True:
+        why = firstrun.use_folder(folder)
+        if not why:
+            print(f"  Models   {places.models_dir()}")
+            return 0
+        print(f"  {why}")
+        if a.yes or a.models_dir:
+            return 1
+        try:
+            folder = input("  Another folder (empty = stop): ").strip().strip('"')
+        except EOFError:
+            folder = ""
+        if not folder:
+            return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description="M42 UI setup: the model and tools for this PC")
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--tier", choices=list(firstrun.TIERS))
     ap.add_argument("--no-speech", action="store_true")
     ap.add_argument("--no-start", action="store_true")
+    ap.add_argument("--3d-pack", dest="three_d_pack", action="store_true", help="download the optional 3D pack (~120 MB)")
+    ap.add_argument("--no-3d-pack", dest="no_3d_pack", action="store_true")
+    ap.add_argument("--models-dir", dest="models_dir", help="the folder the models go to")
     a = ap.parse_args()
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -118,16 +182,21 @@ def main():
         other = "2b" if tier == "4b" else "4b"
         if not ask(f"  Use {firstrun.TIERS[tier]['label']}? (no = {firstrun.TIERS[other]['label']})", False):
             tier = other
+    if a.models_dir or not places.chosen():
+        if choose_folder(a, tier) != 0:
+            return 1
     items = firstrun.plan(tier, speech=not a.no_speech)
     if not items:
         print("\nEverything is already here.")
     else:
         by, total = firstrun.sizes(items)
-        print(f"\nTo download ({size(total)}, from Hugging Face and GitHub):")
+        print(f"\nTo download ({size(total)}, from Hugging Face and GitHub), models into {firstrun.MODELS}:")
         for i in items:
             print(f"  - {i['label']:44} {size(i['size']) if i['size'] else 'about 45 MB'}")
-        if total > info["free_gb"] * GB * .95:
-            print(f"\nNot enough disk space: {size(total)} needed, {info['free_gb']:g} GB free.")
+        need, runners = firstrun.space(items)
+        why = places.check(firstrun.MODELS, need) if need else ""
+        if why or places.free_bytes(ROOT) < runners + (200 << 20):
+            print(f"\n{why or 'Not enough space for the runners in the app folder.'}")
             return 1
         if not ask(f"\nDownload these {len(items)} files now?", a.yes):
             print("Nothing was downloaded. Run this again when you are ready (or press Download in the app).")
@@ -144,6 +213,7 @@ def main():
             return 1
         print("Downloaded and checked (sizes and SHA-256).")
     firstrun.save_tier(tier)
+    three_d_pack(a)
     launcher = make_launcher()
     print(f"\nReady. Start M42 UI with: {launcher.name}")
     if not a.no_start and ask("Start M42 UI now?", a.yes):

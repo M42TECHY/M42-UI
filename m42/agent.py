@@ -1872,6 +1872,8 @@ CSS or HTML is no library."""
 
     # how wide a part sits in a row of 12 (the rows are packed from these: data, one number per part)
     TOP_PARTS = ("kpi_tiles", "stats")  # (the numbers of the day sit on top of an app screen)
+    # parts that help the work in a column it shares (filters, the day's numbers, shortcuts, notices): under the work
+    SUPPORT_PARTS = {"category_chips", "chips", "kpi_tiles", "stats", "quick_actions", "alerts", "dropdown_filter", "metric_pair"}
     SPANS = {"kpi_tiles": 12, "stats": 12, "data_table": 12, "table": 12, "week_schedule": 8, "calendar": 8,
              "line_chart": 8, "bar_chart": 8, "area_chart": 8, "invoice": 5, "donut": 4, "agenda": 4, "progress_list": 4,
              "list_thumbs": 4, "alerts": 4, "form": 4, "modal": 4, "image_cards": 8, "category_chips": 12}
@@ -1915,7 +1917,7 @@ requests need none: answer {"extras": []}."""
         missing = [w for w in dict.fromkeys(re.findall(r"[a-z][a-z']{3,}", asked.lower()))
                    if w not in self.GENERIC_ASK and w not in shown and w.rstrip("s") not in shown and w[:5] not in shown]
         parts = [p for p in pagebuild.PARTS if p in widgets.WIDGETS or p in ("form", "table")]
-        extras, asked_names, inside = [], set(), {}
+        extras, asked_names, inside, frame_asks = [], set(), {}, []
         self._asked_libraries = []  # (this build's own: the agent outlives a build)
         items = [it for it in spec.get("items") or [] if isinstance(it, dict) and it.get("name")][:14]
         # the places it may choose (no name to type: it typed none right and put every ask in the frame, 2026-11-17)
@@ -1956,7 +1958,10 @@ requests need none: answer {"extras": []}."""
                 target = by_name.get(key_(a.get("section")))
                 seen_asks.append(f'{a.get("item")} → ' + (f'inside {a["section"]}' if how == "inside" else a["section"] if how == "section"
                                                          else f'new [{a.get("part")}]' if how == "new" else "frame"))
+                if how == "frame":
+                    frame_asks.append(str(a.get("item")))
                 if how == "section" and target:  # the user's own words name it (theirs first)
+                    target.setdefault("asks", []).append(str(a.get("item")))
                     by_name[key_(a.get("item"))] = target
                     target["what"] = f'{target["what"]}; {a.get("what") or a.get("item")}'[:240]
                     if nm:
@@ -1964,11 +1969,14 @@ requests need none: answer {"extras": []}."""
                         target["name"] = nm
                     asked_names.add(id(target))
                 elif how == "new" and a.get("part") in parts and nm and key_(nm) not in by_name:
-                    x = {"name": nm, "what": str(a.get("what") or a.get("item") or "")[:200], "part": a["part"], "extra": True}
+                    x = {"name": nm, "what": str(a.get("what") or a.get("item") or "")[:200], "part": a["part"], "extra": True,
+                         "asks": [str(a.get("item"))]}
                     extras.append(x)
                     by_name[key_(nm)] = by_name[key_(a.get("item"))] = x
                     asked_names.add(id(x))
                 elif how == "inside":  # a button with its popup, a search box: said to the section it is in
+                    if by_name.get(key_(a.get("section"))) is not None:
+                        by_name[key_(a.get("section"))].setdefault("asks", []).append(str(a.get("item")))
                     inside.setdefault(key_(a.get("section")), []).append(
                         " ".join(str(a.get("what") or a.get("item") or "").split())[:140])
             for key, said in inside.items():
@@ -2023,6 +2031,22 @@ requests need none: answer {"extras": []}."""
             sk = dict(sk, layout=rows)
         rows = sk["layout"]  # (the user's new sections are in it already, each with its slot)
         all_secs = secs + extras
+        # ★ the main tool first in its column, for any kind: what shares its column (filters, the day's numbers) comes
+        # under it (a POS showed its categories above its products, 2026-11-17: "products first, the bill beside")
+        def lead(s_):  # 0: the main tool; 1: a part of the work (products, a table, a chart); 2: what helps it
+            return 0 if s_.get("main") else 2 if s_.get("part") in self.SUPPORT_PARTS else 1
+        for slot_ in {tuple(s_["slot"]) for s_ in all_secs if s_.get("slot")}:
+            same = [s_ for s_ in all_secs if tuple(s_.get("slot") or ()) == slot_]
+            if len(same) < 2:
+                continue
+            at_ = [all_secs.index(s_) for s_ in same]
+            for i_, s_ in zip(at_, sorted(same, key=lead)):  # (stable: the skeleton's order within each kind)
+                all_secs[i_] = s_
+            r_, c_ = slot_
+            if r_ < len(rows) and c_ < len(rows[r_]):
+                order_ = [s_["part"] for s_ in sorted(same, key=lead)]
+                col_ = rows[r_][c_]
+                col_["parts"] = [p_ for p_ in order_ if p_ in col_["parts"]] + [p_ for p_ in col_["parts"] if p_ not in order_]
         def col_text(col, r, c):  # (by its place: two data tables, a students' and a fees', showed one name twice)
             here = next((s for s in all_secs if s.get("slot") == [r, c]), None)
             names = [here["name"]] if here else [next((s["name"] for s in all_secs if s["part"] == p), p) for p in col["parts"]]
@@ -2036,7 +2060,8 @@ requests need none: answer {"extras": []}."""
         emit({"type": "progress", "id": rid, "done": True, "text": f"🧐 {sk['work'][:1].upper() + sk['work'][1:]} → "
               + ", ".join(("★ " if s.get("main") else "") + s["name"] for s in all_secs)})
         return dict(spec, sections=[{"name": s["name"], "what": s["what"], "part": s["part"], "slot": s["slot"],
-                                     **({"main": True} if s.get("main") else {})} for s in all_secs],
+                                     **({"main": True} if s.get("main") else {}), **({"asks": s["asks"]} if s.get("asks") else {})}
+                                    for s in all_secs], frame_items=frame_asks,
                     hero="compact", app_flow=True, app_layout=rows, app_for=f"{sk['users']}: {sk['work']}",
                     app_screens=getattr(self, "_app_screens", []),
                     **({"libraries": self._asked_libraries} if getattr(self, "_asked_libraries", None) else {}))
@@ -2710,6 +2735,13 @@ per part the message names], "why": one short sentence}."""
         list loses them. Returns (page, changed)."""
         probs = list(getattr(self, "_page_problems", None) or [])
         new, done = page, []
+        if self.workspace.roots:
+            new, dropped = webkit.mend_refs(new, self.workspace.roots[0][1])
+            if dropped:
+                done.append("links to files the folder does not have taken out: " + ", ".join(dropped[:4]))
+                gone = {d.split(" (")[0].rsplit("/", 1)[-1] for d in dropped}
+                probs = [p for p in probs if not (re.match(r"\s*-?\s*Failed to load", p) and any(g in p for g in gone))]
+                self._page_problems = probs
         if any("button has no label" in p.lower() for p in probs):
             def label(m):
                 tag = m.group(0)
@@ -3643,8 +3675,12 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             return out
         # `story` is the 4B's own list of things (the story's and the business's, as nouns): matched to the kit's names,
         # no free text searched for words (the camera of "the camera pulls back", "Powers" in a slogan, 2026-11-16)
-        told = words(story)
+        things_ = story if isinstance(story, (list, tuple)) else [story]
+        told = words(" ".join(things_))
         told_joined = {x + y for x, y in zip(told, told[1:])}  # ("smart watch" -> smartwatch)
+        # (a thing of one word may sit inside a longer name: "tractor" in compact_tractor; a word of a longer thing may
+        # not: "machine" of "x-ray machine" brought an espresso machine to a hospital, 2026-11-17)
+        single = {w[0] for w in (words(t) for t in things_ if isinstance(story, (list, tuple))) if len(w) == 1}
         stop = {"a", "an", "the", "and", "of", "it", "in", "on", "to", "up", "out", "with", "half", "small", "big", "flat",
                 "open", "closed", "round", "square", "low", "modern", "large", "deluxe", "basic"}
         told_set = set(told)
@@ -3657,12 +3693,94 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             s = 0
             if "".join(parts) in told_joined or all(x in told_set for x in parts):
                 s += 6 + len(parts)  # (the longer name said in full first: "honey jar" over "jar")
+            else:  # 📦 the 3D pack's names say more than the thing ("compact_tractor", "ambulance_van", "red_barn"):
+                # a thing the story said (a noun of 4+ letters) inside the name counts, after the names said in full
+                hit = [x for x in parts if len(x) >= 4 and x in single]
+                if hit:
+                    s += 2 + len(hit) - .1 * (len(parts) - len(hit))
+            if o in getattr(self, "_kit_names", ()):  # (the pack kit the 4B chose for this business)
+                s += 1.5
             if s:
                 scores[o] = s
         picked = [o for o, _s in sorted(scores.items(), key=lambda x: (-x[1], x[0]))][:n]
-        if not picked:  # (a story in words the kit has no names for: the whole kit, as before)
-            return list(cat["objects"])
+        picked += [o for o in getattr(self, "_kit_names", ()) if o not in picked and o in cat["objects"]][:max(0, n + 24 - len(picked))]
+        if not picked:  # (a story in words the kit has no names for: the whole kit, as before; not the 3D pack's ~850
+            import modelsearch  # names too: they are found by name only, or the 4B's list doubles)
+            return [o for o in cat["objects"] if not modelsearch.in_pack(o)]
         return picked + [o for o in self.KIT_ALWAYS if o in cat["objects"] and o not in picked]
+
+    def _pack_kit_names(self, asked, plan, things, emit, model=None):
+        """📦 The 3D pack's kits (a restaurant cafe, a hospital, a farm...: m42/packs/models3d/<kit>/) that are this
+        business's place, chosen by the 4B from the kits there (none when none fits); their things' names, for the story
+        to use. The pack's names say more than a thing ("espresso_machine" for a coffee machine): matched by words alone,
+        a restaurant's story found none of its 60 (2026-11-17). [] when there is no pack."""
+        import modelsearch
+        lib = modelsearch.library()
+        kits = sorted({p.split("/")[0] for n, p in lib.items() if modelsearch.in_pack(n)})
+        if not kits:
+            return []
+        label = {k: k.replace("_", " ") for k in kits}
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
+                {"role": "system", "content": "A web page's 3D scene shows a business. Which of these sets of 3D models is closest to "
+                                              "this business's own kind of place? Answer kit = the closest set."},
+                {"role": "user", "content": f"The request: {asked[:400]}\nIts things: {', '.join(things[:12])}\n"
+                                            f"The sets: {', '.join(label[k] for k in kits)}"}],
+                {"type": "object", "properties": {"kit": {"type": "string", "enum": [label[k] for k in kits]}}, "required": ["kit"]},
+                max_tokens=30, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "3D pack kit", timings)
+        except (llm.LLMError, ValueError, OSError):
+            return []
+        # (the closest set first, then its own things looked at: with "none" allowed the 4B said none even for a hospital;
+        # asked "does it fit" it said yes to a casino's set for a jewellery shop, 2026-11-17)
+        chosen = [k for k in kits if label[k] == raw.get("kit")]
+        if not chosen:
+            return []
+        try:  # (its own small question, yes or no: asked together with the choice, or with the things, the 4B always
+            # found a fit: a yoga studio got a farm's things, a jewellery shop a casino's, 2026-11-17)
+            same, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
+                {"role": "system", "content": "Answer same = true only when the business IS this kind of place, or a part of it "
+                                              "(a pharmacy counter is part of a hospital's world; a juice bar is a cafe's kind of place); "
+                                              "false when it is another kind of place that merely shares a few things."},
+                {"role": "user", "content": f"The business: {asked[:300]}\nThe kind of place: {label[chosen[0]]}"}],
+                {"type": "object", "properties": {"same": {"type": "boolean"}}, "required": ["same"]},
+                max_tokens=12, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "3D pack kit", timings)
+        except (llm.LLMError, ValueError, OSError):
+            return []
+        if not same.get("same"):
+            return []
+        # (a place's building pieces are no thing a story shows: floor tiles, decals, wall modules; as library() leaves the
+        # bundled kit's floors and walls out) and the list in an order of its own for this request (the 4B took the first
+        # 16 a-z: floor tiles and decals, 2026-11-17)
+        names = [n for n, p in lib.items() if modelsearch.in_pack(n) and p.split("/")[0] in chosen
+                 and not re.search(r"(^|_)(tile|decal|module|panel|marking)(_|$)", n)][:120]
+        if not names:
+            return []
+        import random
+        random.Random(hashlib.md5(asked.encode("utf-8", "replace")).hexdigest()).shuffle(names)
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), model or self.active_model(), [
+                {"role": "system", "content": "A web page's 3D scene shows a business with 3D models. The list is the 3D set "
+                                              "closest to it, which may be of ANOTHER kind of place. Choose only the things a "
+                                              "customer would really see in THIS business (its own products, tools, machines, "
+                                              "furniture, vehicles, its people at work), the most telling first. Fewer is fine: "
+                                              "a set of another kind of place gives 0-3 (a bookshop and an office's set: a desk "
+                                              "and a lamp, never its photocopier); none fits: []."},
+                {"role": "user", "content": f"The business: {asked[:400]}\nThe list: {', '.join(n.replace('_', ' ') for n in names)}"}],
+                {"type": "object", "properties": {"things": {"type": "array", "maxItems": 10, "items": {
+                    "type": "string", "enum": [n.replace("_", " ") for n in names]}}}, "required": ["things"]},
+                max_tokens=240, api_key=self.config.get("api_key") or None)
+            self._emit_stats(emit, "3D pack things", timings)
+        except (llm.LLMError, ValueError, OSError):
+            return []
+        said = [str(x) for x in raw.get("things") or []]
+        keep = [n for x in said for n in names if n.replace("_", " ") == x]  # (in the 4B's order: the most telling first)
+        keep = list(dict.fromkeys(keep))
+        if keep:
+            emit({"type": "note", "message": f"📦 3D pack ({label[chosen[0]]}): {len(keep)} of its models fit this business: "
+                                             + ", ".join(n.replace("_", " ") for n in keep[:10])})
+        return keep
 
     def _business_things(self, asked, plan, model=None):
         """🎯 The things of this business a 3D artist would model, named by the 4B as plain singular nouns ("tooth",
@@ -3757,12 +3875,15 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         # story shows the business with them (a dental story asked for braces and an implant the kit lacks, and the
         # scene was one tooth three times, 2026-11-16)
         things = self._business_things(asked, plan, model)  # (the 4B names them: "tooth", "toothbrush"; no word list)
-        own = [o for o in self._kit_shortlist(cat, " ".join(things), asked, plan) if o not in self.KIT_ALWAYS]
+        self._kit_names = self._pack_kit_names(asked, plan, things, emit, model)
+        own = [o for o in self._kit_shortlist(cat, list(things), asked, plan) if o not in self.KIT_ALWAYS]
         own = own if len(own) < len(cat["objects"]) else []
         self._scene_things = things
         user = (f"The request: {asked[:500]}\nThe brand: {brand}\nThe hero's heading: {h.get('title', '')} {h.get('accent', '')}\n"
                 + (f"The 3D kit has these things of this business: {', '.join(o.replace('_', ' ') for o in own[:12])}. Make "
                    "them the scene's things (2-5 of them; things the kit lacks cannot be shown).\n" if own else "")
+                + (f"Its 3D pack has these things of this business too: {', '.join(o.replace('_', ' ') for o in self._kit_names[:16])}."
+                   " Use its things by these names.\n" if self._kit_names else "")
                 + "The page's sections: " + ", ".join(str(s.get("title") or s.get("part")) for s in plan.get("sections") or [])[:300]
                 + ("\nEarlier scenes (write a different one): " + " | ".join(str(e.get("story") or "")[:150] for e in earlier)
                    if earlier else ""))
@@ -3800,7 +3921,7 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         tale = self._scene_story(plan, asked, emit, model, cat)  # 🎬 step 1: the story (the user's, else the 4B's)
         if tale:
             emit({"type": "progress", "id": sid + "s", "done": True, "text": f"🎬 The scene's story: {tale[:400]}"})
-        short = self._kit_shortlist(cat, " ".join((getattr(self, "_story_things", None) or []) + (getattr(self, "_scene_things", None) or [])),
+        short = self._kit_shortlist(cat, list((getattr(self, "_story_things", None) or []) + (getattr(self, "_scene_things", None) or [])),
                                     asked, plan)  # 🎯 step 2 sees only the kit's things of this story / business
         if len(short) < len(cat["objects"]):
             emit({"type": "note", "message": f"🎯 The kit's things for this scene ({len(short)} of {len(cat['objects'])}): "
@@ -3910,6 +4031,9 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         libs = modelsearch.library_files([x for x in used if x in modelsearch.library()], root)
         if libs:  # 📦 the bundled models (people, pets, food, furniture) the scene uses, beside the page
             scene["models"] = libs
+            cred = modelsearch.credits(list(libs))
+            if cred:  # (the 3D pack's models are CC BY 4.0: the page's footer credits them)
+                scene["credits"] = cred
         plan["scene3d"] = scene
         emit({"type": "progress", "id": sid, "done": True,
               "text": (f"🎬 3D scene in {len(scene['beats'])} steps: " + " → ".join(f"{b['caption'] or b['story']} ({', '.join(o.replace('_', ' ') for o in b['objects'])}, {b['story'].replace('_', ' ')})" for b in scene["beats"])
@@ -4559,6 +4683,9 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         root = self.workspace.roots[0][1]
         local, _ = webkit.localize(page, root)
         webkit.sync_files(root, {n for n in webkit.KIT_FILES if f"lib/{n}" in local}, "")
+        local, dropped = webkit.mend_refs(local, root)
+        if dropped:
+            emit({"type": "note", "message": "🩹 Links to files the folder does not have, taken out: " + ", ".join(dropped[:4])})
         try:
             res = self.workspace.write_file("index.html", local)
         except (ToolError, OSError) as e:
@@ -6479,6 +6606,7 @@ line that you will do it if they send it as a change."""
             if new:  # a library the coder linked from the web: the kit's own copy in lib/ instead (no download)
                 new = webkit.local_kit(new) if hasattr(webkit, "local_kit") else new
             if new and new != old:
+                new = webkit.mend_refs(new, root)[0]
                 self.workspace.write_file(pg["file"], new)
                 pg.setdefault("hand_edits", []).extend(edits)
                 written.append(pg["file"])
@@ -6527,7 +6655,7 @@ line that you will do it if they send it as a change."""
                 old = (root / f).read_text(encoding="utf-8")
                 edits, new = self._node_edit(old, f, f'{message} ({ch.get("what") or ""})', emit)
                 if new and new != old:
-                    self.workspace.write_file(f, webkit.local_kit(new) if hasattr(webkit, "local_kit") else new)
+                    self.workspace.write_file(f, webkit.mend_refs(webkit.local_kit(new) if hasattr(webkit, "local_kit") else new, root)[0])
                     pg.setdefault("hand_edits", []).extend(edits)
                     notes.append(f'{f}: {ch.get("what") or "changed"} (a line edit)')
                     got = [f]

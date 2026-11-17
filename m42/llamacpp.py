@@ -19,7 +19,8 @@ import hardware
 
 ROOT = Path(__file__).resolve().parent.parent
 EXE = ROOT / "llama.cpp" / "vulkan" / "llama-server.exe"
-MODELS_DIR = ROOT / "models"
+import places  # noqa: E402  (the models folder chosen on this PC)
+MODELS_DIR = places.models_dir()
 LOG = Path(__file__).resolve().parent / "logs" / "llama-server.log"
 # saved prompt caches (~90 MB each). Its own folder for flash attention off: the KV cache layout differs, so the
 # caches saved with -fa on must not be restored
@@ -86,7 +87,7 @@ def spec_args(key):
 def draft_args(key):
     """The draft-model arguments for `key`, or [] when it has none (or its file isn't in models/)."""
     name = DRAFTS.get(key)
-    path = (ROOT / "models" / name) if name else None
+    path = (MODELS_DIR / name) if name else None
     if not path or not path.exists():
         return []
     return ["-md", str(path), "-ngld", "0", "--spec-draft-n-max", str(DRAFT_MAX), "-td", "6",

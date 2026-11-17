@@ -25,6 +25,7 @@ The UI files of the app window (`m42/ui/vendor/`) keep the licence headers of th
 | Qwen3.5-4B (GGUF) and its vision projector | Apache-2.0 (see the model card) | huggingface.co/Qwen |
 | UI-DETR-1 (optional) | MIT | huggingface.co/racineai/UI-DETR-1 |
 | UIGEN-T2 dataset (optional, `knowledge/uigen-t2/`) | Apache-2.0 | huggingface.co/datasets/Tesslate/UIGEN-T2 |
+| 3D pack (optional, `m42/packs/models3d/`): ~850 low-poly models by Polyfork, unchanged; each credited in the pack's `LICENSE.txt` and in the footer of a page that uses it. Polyfork does not endorse M42 UI. | CC BY 4.0 | polyfork.dev (M42 UI's GitHub release `3d-pack`) |
 
 ## Design references
 

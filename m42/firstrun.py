@@ -29,8 +29,10 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+import places  # noqa: E402  (where the models go: chosen once on this PC, places.py)
+
 ROOT = Path(__file__).resolve().parent.parent
-MODELS = ROOT / "models"
+MODELS = places.models_dir()
 LLAMA = ROOT / "llama.cpp"
 WHISPER_DIR = ROOT / "whisper.cpp" / "bin"
 CONFIG = Path(__file__).resolve().parent / "config.json"
@@ -297,6 +299,47 @@ def sizes(items):
     return out, sum(out.values())
 
 
+def space(items):
+    """(bytes the models' folder needs, bytes the app's folder needs: the runners)."""
+    models = sum(i["size"] or 0 for i in items if i["kind"] == "file")
+    runners = sum(i["size"] or 45 << 20 for i in items if i["kind"] != "file")
+    return models, runners
+
+
+def place_info(items=None):
+    """📦 Where the models go and the room for them, for the app's first-run note and the installer: the folder
+    (chosen or suggested), the GB needed, each drive's free GB, and whether the folder has the room."""
+    items = plan() if items is None else items
+    need, runners = space(items)
+    folder, enough = (str(places.models_dir()), None) if places.chosen() else places.suggest(need)
+    if enough is None:
+        enough = not need or places.free_bytes(folder) >= need + places.MARGIN
+    app_room = not runners or places.free_bytes(ROOT) >= runners + (200 << 20)
+    return {"folder": folder, "chosen": places.chosen(), "need_gb": round(need / 2 ** 30, 2),
+            "room_gb": round((need + places.MARGIN) / 2 ** 30, 1), "runners_gb": round(runners / 2 ** 30, 2),
+            "enough": bool(enough), "app_room": app_room, "app_folder": str(ROOT), "drives": places.drives()}
+
+
+def use_folder(folder):
+    """The user's folder for the models: checked (made, writable, the room), then kept for this PC. "" or why not."""
+    need, _ = space(plan_in(folder))
+    why = places.check(folder, need)
+    if not why:
+        places.save(folder)
+    return why
+
+
+def plan_in(folder):
+    """plan() as it would be with the models in `folder` (what it already holds is not downloaded again)."""
+    global MODELS
+    keep = MODELS
+    MODELS = Path(folder)
+    try:
+        return plan()
+    finally:
+        MODELS = keep
+
+
 def check(timeout=30, tier=None):
     """Every file of this system's setup, reached and measured without downloading it (one byte asked for):
     [(name, url, ok, bytes, note)]."""
@@ -405,13 +448,24 @@ def run(items=None, tier=None, on_step=None):
         return False
 
 
-def start(consent=False):
-    """In the app: with something missing, the list waits for the user's yes ("consent"); with it, the download runs in
-    the background. Returns True when it is running (or started)."""
+def start(consent=False, folder=None):
+    """In the app: with something missing, the list waits for the user's yes ("consent") and, on a PC with no models
+    folder chosen yet, their folder; with them, the download runs in the background. Returns True when it is running
+    (or started). A folder without the room: nothing starts, state "error" says why."""
     with _lock:
         if state["state"] == "running":
             return True
+    if consent and (folder or not places.chosen()):
+        why = use_folder(folder or place_info()["folder"])
+        if why:
+            with _lock:
+                state.update(state="error", error=why)
+            return False
     todo = plan()
+    if consent and todo and not place_info(todo)["app_room"]:
+        with _lock:
+            state.update(state="error", error=f"Not enough space for the runners in the app's folder ({ROOT.anchor or ROOT})")
+        return False
     with _lock:
         if not todo:
             state.update(state="done")
@@ -433,7 +487,8 @@ def status():
         by, total = sizes(items)
         tier = chosen_tier()
         s.update(missing=[i["label"] for i in items], gb=round(total / 2 ** 30, 1),
-                 groups={k: round(v / 2 ** 30, 2) for k, v in by.items()}, tier=tier, tier_label=TIERS[tier]["label"])
+                 groups={k: round(v / 2 ** 30, 2) for k, v in by.items()}, tier=tier, tier_label=TIERS[tier]["label"],
+                 place=place_info(items) if items else None)
     else:
         s.update(missing=[], gb=round((s.get("total") or 0) / 2 ** 30, 1))
     return s

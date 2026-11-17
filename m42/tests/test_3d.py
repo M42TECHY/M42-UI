@@ -33,6 +33,8 @@ check("a 3D page loads three.js, then M42 3D", used.index("three.min.js") < used
 check("... no model loader without a model", "GLTFLoader.js" not in used)
 used2 = webkit.used_files({"index.html": f'<div data-m42-3d="{pagebuild.e(json.dumps(dict(scene, model="models/a/b.gltf")))}"></div>'})
 check("... GLTFLoader with a .gltf model", "GLTFLoader.js" in used2 and used2.index("three.min.js") < used2.index("GLTFLoader.js"), used2)
+used3 = webkit.used_files({"index.html": f'<div data-m42-3d="{pagebuild.e(json.dumps(dict(scene, models={"espresso_machine": "models/lib/cafe/espresso_machine.glb"})))}"></div>'})
+check("... GLTFLoader with bundled / 3D pack models", "GLTFLoader.js" in used3 and used3.index("three.min.js") < used3.index("GLTFLoader.js"), used3)
 plain = webkit.used_files({"index.html": '<header class="m42-hero"><h1>School</h1></header>'})
 check("a page without 3D loads no three.js", "three.min.js" not in plain and "m42-3d.js" not in plain, plain)
 

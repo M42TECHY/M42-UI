@@ -1445,7 +1445,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": str(e)})
             return self._send(200, {"ok": ok})
         if url.path == "/api/setup/start":  # ⬇ the user said yes to the first-run download list
-            if firstrun.start(consent=True):
+            if firstrun.start(consent=True, folder=str(body.get("folder") or "").strip() or None):
                 def after_setup():
                     while firstrun.status()["state"] == "running":
                         time.sleep(2)

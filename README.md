@@ -231,7 +231,10 @@ You can always choose the other one.
      language) and the voice detector.
 
    Each file is checked by its size and SHA-256, and a broken download resumes when you run it again.
-5. Makes the launcher and starts M42 UI.
+5. Offers the **optional 3D pack** (about 120 MB, "no" by default): about 850 free low-poly models from
+   [Polyfork](https://polyfork.dev) (CC BY 4.0) for the 3D landing pages: restaurant, hospital, office, lab,
+   university, hotel, city, airport, cars, farm and more. A page that uses one credits it in its footer.
+6. Makes the launcher and starts M42 UI.
 
 If you start the app without the installer, it shows the same list in its window and downloads only when you
 press Download.
@@ -249,6 +252,7 @@ press Download.
 | `python m42/setup.py --tier 2b` or `--tier 4b` | choose the model yourself |
 | `python m42/setup.py --no-speech` | skip the speech models |
 | `python m42/setup.py --no-start` | install, but do not start the app |
+| `python m42/pack3d.py install` | download the optional 3D pack later (`remove` deletes it) |
 | `python m42/firstrun.py plan` | show this PC and what it would download |
 
 **Optional extras**

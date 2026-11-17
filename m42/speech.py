@@ -24,7 +24,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent          # M42-UI
 EXE = ROOT / "whisper.cpp" / "bin" / ("whisper-server.exe" if os.name == "nt" else "whisper-server")
-MODELS = ROOT / "models"
+import places  # noqa: E402  (the models folder chosen on this PC)
+MODELS = places.models_dir()
 # (turbo, large-v3-turbo, was taken out: ~15 s for 5 s on a CPU; the user, 2026-11-13: "small and IndicConformer only")
 WHISPER = {"small": (MODELS / "ggml-small-q5_1.bin", 8179)}
 INDIC = MODELS / "indicconformer"
@@ -205,6 +206,16 @@ def clean(text):
 
 
 VAD_MODEL = MODELS / "vad" / "silero_vad.onnx"
+
+
+def use_models(d):
+    """The models folder changed (places.py: the user chose where the models go): every path made from it again."""
+    global MODELS, INDIC, VAD_MODEL
+    MODELS = Path(d)
+    WHISPER["small"] = (MODELS / "ggml-small-q5_1.bin", WHISPER["small"][1])
+    INDIC = MODELS / "indicconformer"
+    HF["small-py"] = (MODELS / "whisper-small", HF["small-py"][1])
+    VAD_MODEL = MODELS / "vad" / "silero_vad.onnx"
 
 
 def voice_only(wav):

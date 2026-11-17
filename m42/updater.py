@@ -45,7 +45,7 @@ KEEP_BACKUPS = 2
 # never replaced or removed by an update: what the user, the installer and the first run made on this PC
 KEEP_DIRS = ("models", "llama.cpp", "whisper.cpp", "knowledge", "workspace", "projects", ".venv", ".git", ".claude",
              "benchmark", "m42/cache", "m42/sessions", "m42/memory", "m42/logs", "m42/projects", "m42/plugins",
-             "m42/backups")
+             "m42/backups", "m42/packs")
 KEEP_FILES = ("m42/config.json", "m42/.release-files.json", "Start M42 UI.sh", "Start M42 UI.command")
 
 

@@ -17,7 +17,9 @@ USER_EXT = (".glb", ".gltf", ".stl")
 
 _catalog = None
 LIB = Path(__file__).resolve().parent / "bundled" / "models3d"  # 📦 free CC0 model packs bundled with M42 (Kenney, 2026-11-14)
+PACK = Path(__file__).resolve().parent / "packs" / "models3d"  # 📦 the optional 3D pack (pack3d.py: Polyfork, CC BY 4.0)
 _library = None
+_source = {}  # name -> (folder the file is in: LIB or PACK)
 # a pack's file name -> the thing's name in the catalog (people and animals by what they are; the rest by their own name)
 _PREFIX = {"character-": "", "animal-": "", "aid-": "", "item-": ""}
 _PEOPLE = {"female-a": "woman", "female-b": "woman_2", "female-c": "woman_3", "female-d": "woman_4", "female-e": "woman_5",
@@ -37,8 +39,15 @@ def library():
     if _library is not None:
         return _library
     out = {}
-    for f in sorted(LIB.glob("*/*.glb")) if LIB.is_dir() else []:
+    files = (sorted(LIB.glob("*/*.glb")) if LIB.is_dir() else []) + (sorted(PACK.glob("*/*.glb")) if PACK.is_dir() else [])
+    for f in files:  # (the bundled packs first: a name both have stays the bundled one)
         stem = f.stem
+        if f.parents[1] == PACK:
+            name = _snake(stem)
+            if name and name not in out:
+                out[name] = f"{f.parent.name}/{f.name}"
+                _source[name] = PACK
+            continue
         if f.parent.name == "mini-characters" and stem.startswith("character-"):
             name = _PEOPLE.get(stem[len("character-"):], "")
         else:
@@ -50,6 +59,7 @@ def library():
             continue  # (a room's building pieces: no thing a story shows)
         if name and name not in out:
             out[name] = f"{f.parent.name}/{f.name}"
+            _source[name] = LIB
     if "woman" in out:
         out.setdefault("person", out["woman"])
         out.setdefault("people", out["man"]) if "man" in out else None
@@ -84,19 +94,27 @@ def catalog():
 
 
 def library_files(names, root):
-    """The bundled models a scene uses, copied into the page's folder (models/lib/...): {name: relative path}."""
+    """The bundled models a scene uses, copied into the page's folder (models/lib/...): {name: relative path}. A model
+    of the 3D pack (CC BY 4.0) gets its credit line in models/CREDITS.txt (credits() gives it to the page's footer)."""
     import shutil
     lib, out = library(), {}
     for n in names:
         rel = lib.get(n)
         if not rel or not root:
             continue
-        src = LIB / rel
+        base = _source.get(n, LIB)
+        src = base / rel
         dst = Path(root) / "models" / "lib" / rel
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
             if not dst.exists():
                 shutil.copy2(src, dst)
+            if base == PACK:
+                c = _pack_credits().get(rel)
+                if c:
+                    _add_credit(Path(root), f"{c['name']} by Polyfork ({c['url']}), CC BY 4.0")
+                out[n] = f"models/lib/{rel}"
+                continue
             tex = src.parent / "Textures"
             if tex.is_dir() and not (dst.parent / "Textures").exists():
                 shutil.copytree(tex, dst.parent / "Textures")
@@ -107,6 +125,42 @@ def library_files(names, root):
             continue
         out[n] = f"models/lib/{rel}"
     return out
+
+
+_credits = None
+
+
+def _pack_credits():
+    global _credits
+    if _credits is None:
+        try:
+            _credits = json.loads((PACK / "credits.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _credits = {}
+    return _credits
+
+
+def in_pack(name):
+    library()
+    return _source.get(name) == PACK
+
+
+def credits(names):
+    """[{"name", "url"}] of the 3D pack's models among `names` (CC BY: the page's footer credits them)."""
+    lib, out = library(), []
+    for n in names:
+        if _source.get(n) == PACK:
+            c = _pack_credits().get(lib.get(n))
+            if c and c not in out:
+                out.append({"name": c["name"], "url": c["url"]})
+    return out
+
+
+def _add_credit(root, line):
+    f = root / "models" / "CREDITS.txt"
+    old = f.read_text(encoding="utf-8") if f.exists() else ""
+    if line + "\n" not in old:
+        f.write_text(old + line + "\n", encoding="utf-8")
 
 
 def user_models(root):

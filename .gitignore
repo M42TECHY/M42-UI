@@ -31,3 +31,6 @@ dist/
 # the updater: backups of the version before, its list of release files
 m42/backups/
 m42/.release-files.json
+
+# the optional 3D pack (m42/pack3d.py): a release download, not in git
+m42/packs/

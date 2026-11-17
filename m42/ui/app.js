@@ -2389,21 +2389,56 @@ async function checkStatus() {
     }
     if ((su.state === "needs_consent" || su.state === "error") && (su.missing || []).length) {
       // ⬇ a new PC: what is missing, its size, and the user's yes before anything downloads (firstrun.py)
+      const old = document.querySelector(".m42-setup-ask");
+      if (old && old.dataset.error !== (su.error || "")) old.remove();  // (a new reason: the note says it)
       if (!document.querySelector(".m42-setup-ask")) {
-        const g = su.groups || {};
+        // 📦 how much room it needs FIRST, then where the models go (the user, 2026-11-17: "a ZIP in Downloads on C:
+        // must not fill C:"): each drive with its free space; the download starts only where the room is
+        const g = su.groups || {}, pl = su.place || {};
         const part = (k, name) => g[k] ? `${name} ${g[k] < 1 ? Math.round(g[k] * 1024) + " MB" : g[k].toFixed(1) + " GB"}` : "";
         const n = document.createElement("div");
         n.className = "m42-setup-note m42-setup-ask";
-        n.innerHTML = `<b>M42 UI needs to download ${su.gb} GB for this PC</b><span>` +
-          [part("model", `AI model (${su.tier_label})`), part("runner", "its runner (llama.cpp)"), part("speech", "speech models (IndicConformer Tamil + Whisper small)")]
-            .filter(Boolean).join(" · ") + ". From Hugging Face and GitHub; nothing else is sent.</span>" +
-          (su.state === "error" ? `<span>The last download stopped: ${esc(su.error || "")}. It resumes where it stopped.</span>` : "");
+        n.dataset.error = su.error || "";
+        n.innerHTML = `<b>M42 UI needs about ${pl.room_gb || su.gb} GB of free space for this PC</b><span>` +
+          [part("model", `AI model (${su.tier_label})`), part("speech", "speech models (IndicConformer Tamil + Whisper small)"),
+           part("runner", "its runner (llama.cpp, in the app's folder)")].filter(Boolean).join(" · ") +
+          `, plus ${Math.round(((pl.room_gb || 0) - (pl.need_gb || 0)) * 10) / 10 || 1.5} GB room while it downloads. From Hugging Face and GitHub; nothing else is sent.</span>` +
+          (su.state === "error" ? `<span class="m42-setup-err">${esc(su.error || "")}</span>` : "");
+        const where = document.createElement("div");
+        where.className = "m42-setup-where";
+        let input = null;
+        if (!pl.chosen && (pl.drives || []).length) {  // the models' folder: asked once on this PC
+          where.innerHTML = `<label>Where should the models go?</label>`;
+          input = document.createElement("input");
+          input.type = "text"; input.value = pl.folder || ""; input.spellcheck = false;
+          const chips = document.createElement("div");
+          chips.className = "m42-setup-drives";
+          const need = pl.room_gb || 0;
+          (pl.drives || []).forEach((d) => {
+            const c = document.createElement("button");
+            c.type = "button";
+            const short = d.free_gb < need;
+            c.className = "m42-drive" + (short ? " short" : "") + (d.folder === input.value ? " on" : "");
+            c.textContent = `${d.label} · ${d.free_gb} GB free` + (d.app ? " (this app)" : "");
+            c.title = short ? `Not enough room here (${need} GB needed)` : d.folder;
+            c.disabled = short;
+            c.onclick = () => { input.value = d.folder; chips.querySelectorAll(".m42-drive").forEach((x) => x.classList.toggle("on", x === c)); };
+            chips.appendChild(c);
+          });
+          where.append(input, chips);
+        } else if (pl.folder) {
+          where.innerHTML = `<span>The models go to <code>${esc(pl.folder)}</code></span>`;
+        }
         const go = document.createElement("button");
-        go.type = "button"; go.textContent = su.state === "error" ? "Resume download" : "Download";
-        go.onclick = async () => { n.remove(); await post("/api/setup/start").catch((e) => showError(e.message)); checkStatus(); };
+        go.type = "button"; go.textContent = su.state === "error" && !/space|write|folder/i.test(su.error || "") ? "Resume download" : "Download";
+        go.onclick = async () => {
+          n.remove();
+          await post("/api/setup/start", input ? { folder: input.value.trim() } : {}).catch((e) => showError(e.message));
+          checkStatus();
+        };
         const later = document.createElement("button");
         later.type = "button"; later.textContent = "Not now"; later.className = "ghost"; later.onclick = () => n.remove();
-        n.append(go, later);
+        n.append(where, go, later);
         document.body.appendChild(n);
       }
       box.className = "status bad";
