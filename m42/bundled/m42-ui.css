@@ -1,3 +1,5 @@
+/*! M42 UI kit | MIT License | Copyright (c) 2026 Muthupandi (M42 TECH) | https://github.com/M42TECHY/M42-UI
+ *  This file is MIT even though the M42 UI app is AGPL-3.0: a page built with M42 UI is yours to use under any licence. */
 /* Web fonts (Google Fonts, SIL OFL 1.1: bundled/licenses/OFL-fonts.txt) */
 @font-face { font-family: "Poppins"; src: url("fonts/poppins-600.woff2") format("woff2"); font-weight: 600; font-display: swap; }
 @font-face { font-family: "Poppins"; src: url("fonts/poppins-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }

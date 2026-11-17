@@ -1,3 +1,5 @@
+/*! M42 UI kit | MIT License | Copyright (c) 2026 Muthupandi (M42 TECH) | https://github.com/M42TECHY/M42-UI
+ *  This file is MIT even though the M42 UI app is AGPL-3.0: a page built with M42 UI is yours to use under any licence. */
 /* M42 3D (MIT, part of M42 UI): a 3D scene in a page's hero, made from a small JSON spec the page's planner (the 4B)
  * writes, with no model file needed: objects drawn in code from families of shapes (vessels, boxes, rounds, rings,
  * tubes, nature, tech, food, school, health...), a story that moves them (fill, pour, build up, assemble, orbit...),

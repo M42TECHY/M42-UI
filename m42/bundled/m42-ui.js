@@ -1,3 +1,5 @@
+/*! M42 UI kit | MIT License | Copyright (c) 2026 Muthupandi (M42 TECH) | https://github.com/M42TECHY/M42-UI
+ *  This file is MIT even though the M42 UI app is AGPL-3.0: a page built with M42 UI is yours to use under any licence. */
 /* M42 UI: premium dashboard components (see m42-ui.css). No dependencies; Bootstrap Icons for the icons.
    The page writes the parts with data-* attributes and feeds values:
      M42UI.set('temp', 28.4)            stat card: count-up, delta, sparkline, warn/bad colours

@@ -15,6 +15,9 @@
 | Anton (`fonts/anton-400.woff2`, latin) | @fontsource 5.2.7 | SIL OFL 1.1 (`licenses/OFL-fonts.txt`) | fonts.google.com via fontsource |
 | ui-ux-pro-max-skill design data (`bundled/uiux/*.csv`, `LICENSE` beside them) | main, 2026-11 | MIT, © 2024 Next Level Builder | github.com/nextlevelbuilder/ui-ux-pro-max-skill |
 
+M42 UI's own kit files that go into the pages it builds (`m42-ui.css`, `m42-ui.js`, `m42-3d.js`) are MIT
+(`licenses/M42-kit-MIT.txt`), apart from the rest of M42 UI (AGPL-3.0, `LICENSE`).
+
 The UI files of the app window (`m42/ui/vendor/`) keep the licence headers of their libraries.
 
 ## Downloaded by the user (not in this repository)

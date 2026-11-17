@@ -285,7 +285,10 @@ M42-UI/
 
 ## Licence
 
-M42 UI is open source under the [GNU AGPL-3.0](LICENSE). The pages and sites you build with it are yours.
+M42 UI is open source under the [GNU AGPL-3.0](LICENSE). The pages and sites you build with it are yours: the code
+M42 UI writes into them and the kit files it puts in their `lib/` folder (`m42-ui.css`, `m42-ui.js`, `m42-3d.js`) are
+under the [MIT licence](m42/bundled/licenses/M42-kit-MIT.txt), so you can use, change and sell those sites under any
+licence you like.
 
 **A commercial licence is also available.** Contact: [Instagram @muthupandi20](https://www.instagram.com/muthupandi20) or muthupandi0297@gmail.com
 
