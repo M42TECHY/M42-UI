@@ -13,7 +13,9 @@
 
 [**See what it builds**](#-what-it-builds) · [**Install**](#-install) · [**Support the project**](#-support-m42-ui)
 
-<img src="docs/screenshots/electronics-3d-landing.webp" alt="A 3D landing page built by M42 UI" width="90%">
+<img src="docs/screenshots/electronics-3d-landing.gif" alt="VoltHub, a 3D landing page built by M42 UI, with its 3D scene playing" width="90%">
+
+<sub>VoltHub: a 3D landing page M42 UI built from one request, in about 12 to 18 minutes on an ordinary 16 GB PC.</sub>
 
 </div>
 
@@ -41,7 +43,8 @@ for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s
 
 ## <img src="docs/icons/images.svg" width="30" height="30" alt="" align="top"> What it builds
 
-Real pages built by M42 UI on a 16 GB PC, shown as they came out.
+Real pages built by M42 UI on a 16 GB PC (Ryzen 5 5600G), shown as they came out. Each one
+took **about 12 to 18 minutes** to build, from the request to the finished page.
 
 <table>
   <tr>
