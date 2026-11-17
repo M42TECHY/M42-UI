@@ -1354,7 +1354,8 @@ sections = [{"n": the section's number, "block": its design}], why = one short l
             # (the flow's key roles here too: a normal dental page's review kept its sections, and only the other path
             # put back its reviews and its address, 2026-11-16)
             kept = self._landing_asks(asked, spec, self._keep_key_roles(kept, emit), emit, model)
-            return dict(spec, sections=kept, roles=True, **({"libraries": self._asked_libraries} if getattr(self, "_asked_libraries", None) else {}),
+            return dict(spec, sections=kept, roles=True, frame_items=getattr(self, "_asked_frame", []),
+                        **({"libraries": self._asked_libraries} if getattr(self, "_asked_libraries", None) else {}),
                         **({"styles": self._asked_styles} if getattr(self, "_asked_styles", None) else {}))
         ends = [r for r in rows if r["part"] in ("form", "cta")]
         rows = [r for r in rows if r["part"] not in ("form", "cta")][:7] + ends[:1]  # (the call to act closes it)
@@ -1364,7 +1365,7 @@ sections = [{"n": the section's number, "block": its design}], why = one short l
         for r in rows:  # (a section the 4B gave no role: its part's usual role)
             r.setdefault("role", ROLE_OF_PART.get(r["part"], ""))
         rows = self._landing_asks(asked, spec, self._keep_key_roles(rows, emit), emit, model)
-        out = dict(spec, sections=rows, roles=True)
+        out = dict(spec, sections=rows, roles=True, frame_items=getattr(self, "_asked_frame", []))
         if getattr(self, "_asked_libraries", None):
             out["libraries"] = self._asked_libraries
         if getattr(self, "_asked_styles", None):
@@ -1387,25 +1388,30 @@ each with its npm package name; [] when none is named. Plain / vanilla JavaScrip
 """
 
     PART_PROMPT = """M42 draws each part of a web page with one of its parts (listed). The user asked for ONE thing on
-their page (below, with how they describe it). Answer part = the part that draws it the way the user describes it:
-their "bar chart of sales" is bar_chart; their "photo gallery" is gallery; "reviews" is reviews. Only that one thing."""
+their page (below, with how they describe it), and M42 has a section for it, drawn now with the part named below.
+Answer part = "keep" when that part already draws the thing the way the user describes it (most of the time: a menu
+drawn as image_cards, a gallery as gallery). Only when it does NOT (they asked for a bar chart and it is a stats row),
+the part that draws it their way: their "bar chart" is bar_chart, their "photo gallery" is gallery."""
 
     LOOKS_ASK_PROMPT = """Read a request for a web page. Does it ask for a LOOK or a METHOD for the page (a visual style,
 an effect, a way the page behaves) that is not a section of content, not a JavaScript / CSS library named, and not
 code the user pasted? styles = each one, in the request's own words; [] when it asks for none."""
 
-    def _asked_part(self, item, base, model, key, emit):
+    def _asked_part(self, item, base, model, key, emit, now=""):
         """One ask's part, in its own small call (one question: the 4B answered it right alone; with seven asks and six
         fields in one call it called a "Chart.js bar chart" a stats row, 2026-11-17). "" when not reached."""
         parts = [p_ for p_ in webkit.PARTS if p_ != "custom"]
         try:
             raw, timings = llm.complete_json(base, model, [
                 {"role": "system", "content": self.PART_PROMPT + "\nThe parts: " + ", ".join(parts)},
-                {"role": "user", "content": f'The user asked for: {item.get("name")}: {item.get("shows") or ""}'}],
-                {"type": "object", "properties": {"part": {"type": "string", "enum": parts}}, "required": ["part"]},
+                {"role": "user", "content": f'The user asked for: {item.get("name")}: {item.get("shows") or ""}\n'
+                                            f'M42 draws it now as: {now or "nothing yet"}'
+                                            + (f' ({recipes.HOLDS[now][0]})' if now in recipes.HOLDS else "")}],
+                {"type": "object", "properties": {"part": {"type": "string", "enum": ["keep"] + parts}}, "required": ["part"]},
                 max_tokens=20, api_key=key)
             self._emit_stats(emit, "your asks", timings)
-            return raw.get("part") or ""
+            got = raw.get("part") or ""
+            return now if got == "keep" else got
         except (llm.LLMError, ValueError, OSError):
             return ""
 
@@ -1527,7 +1533,7 @@ blocks of the page that class is for: their numbers from the map (each line one 
         4B, chosen from the sections, NEW, inside one, or the frame; a new one goes before the closing action; the
         libraries their words name are kept. Returns the rows."""
         items = [it for it in spec.get("items") or [] if isinstance(it, dict) and it.get("name")][:14]
-        self._asked_libraries, self._asked_styles = [], []
+        self._asked_libraries, self._asked_styles, self._asked_frame = [], [], []
         for r in rows:
             r["name"] = self._plain_name(r.get("name"))
         if not items or not rows:
@@ -1562,17 +1568,31 @@ blocks of the page that class is for: their numbers from the map (each line one 
         by = {key_(r["name"]): r for r in rows}
         base_, mdl_, k_ = llamacpp.base_url_for(self.config), model or self.active_model(), self.config.get("api_key") or None
         items_by = {it["name"]: it for it in items}
+        # (each ask read once; and "inside <section>" for every ask is no reading: a real build put all eight asks
+        # inside their sections, so the sales chart's part was never asked and no chart came, 2026-11-17)
+        once_, asks_ = set(), []
+        for a in raw.get("asks") or []:
+            if isinstance(a, dict) and a.get("item") not in once_:
+                once_.add(a.get("item"))
+                asks_.append(a)
+        body_ = [a for a in asks_ if a.get("place") != "FRAME"]
+        if len(body_) >= 3 and all(str(a.get("place") or "").startswith("inside ") for a in body_):
+            for a in body_:
+                if key_(str(a["place"])[7:]) in by:
+                    a["place"] = str(a["place"])[7:]
+        raw = dict(raw, asks=asks_)
         said_ = set(re.findall(r"[a-z]{4,}", asked.lower())) - self.GENERIC_ASK
         for a in raw.get("asks") or []:  # 🧩 what draws each ask the user placed in a section: its own small question
             # (only a thing the request's own words name: "Sales Chart" yes; a "Why Us" the spec added, no: its part
             # is the flow's, 2026-11-17)
             if isinstance(a, dict) and key_(a.get("place")) in by and a.get("item") in items_by and not self.stop_event.is_set():
                 if set(re.findall(r"[a-z]{4,}", str(a["item"]).lower())) & said_:
-                    a["part"] = self._asked_part(items_by[a["item"]], base_, mdl_, k_, emit) or a.get("part")
+                    a["part"] = self._asked_part(items_by[a["item"]], base_, mdl_, k_, emit,
+                                                 now=by[key_(a.get("place"))].get("part") or "") or a.get("part")
                     a["_named"] = True
                 else:
                     a["part"] = by[key_(a.get("place"))].get("part")
-        new_rows, inside, seen = [], {}, []
+        new_rows, inside, seen, frame_ = [], {}, [], []
         # (one part given to every listed section is no reading of the asks: "hbars" for all seven, the whole page
         # became bars, 2026-11-17): a part change is kept only when the 4B told the sections apart
         moved = [str(a.get("part")) for a in raw.get("asks") or [] if isinstance(a, dict) and key_(a.get("place")) in by
@@ -1584,19 +1604,24 @@ blocks of the page that class is for: their numbers from the map (each line one 
             place = str(a.get("place") or "")
             nm = " ".join(str(a.get("name") or a.get("item") or "").split())[:40]
             if place == "FRAME":
+                frame_.append(str(a.get("item")))
                 seen.append(f'{a.get("item")} → frame')
             elif place == "NEW section" and a.get("part") in parts and nm and key_(nm) not in by:
                 x = {"name": self._plain_name(nm), "what": str(a.get("what") or a.get("item") or "")[:200], "part": a["part"], "n": 3,
                      "asked_part": True,
                      **({"role": a["role"]} if a.get("role") else {"role": ROLE_OF_PART.get(a["part"], "")})}
+                x["asks"] = [str(a.get("item"))]
                 new_rows.append(x)
                 by[key_(nm)] = by[key_(a.get("item"))] = x
                 seen.append(f'{a.get("item")} → new [{a["part"]}]')
             elif place.startswith("inside "):
                 inside.setdefault(key_(place[7:]), []).append(" ".join(str(a.get("what") or a.get("item") or "").split())[:140])
+                if by.get(key_(place[7:])) is not None:
+                    by[key_(place[7:])].setdefault("asks", []).append(str(a.get("item")))
                 seen.append(f'{a.get("item")} → {place}')
             elif key_(place) in by:
                 t = by[key_(place)]
+                t.setdefault("asks", []).append(str(a.get("item")))
                 t["what"] = f'{t.get("what") or ""}; {a.get("what") or a.get("item")}'[:240]
                 if a.get("_named") and a.get("part") == t.get("part"):
                     t["asked_part"] = True  # (the user's own "photo gallery": no premium design in its place, 2026-11-17)
@@ -1623,6 +1648,7 @@ blocks of the page that class is for: their numbers from the map (each line one 
         taken_ = {w for x in [it["name"] for it in items] + [l["name"] for l in self._asked_libraries]
                   for w in re.findall(r"[a-z]{3,}", str(x).lower())}  # (a library or a section asked is no look: "Chart.js
         # bar chart", "photo gallery" came back as looks too, 2026-11-17)
+        self._asked_frame = frame_
         self._asked_styles = [x for x in self._asked_styles_of(asked, base_, mdl_, k_, emit)  # (their own small question)
                               if not set(re.findall(r"[a-z]{3,}", x.lower())) & taken_]
         if seen or self._asked_styles:
@@ -2974,8 +3000,8 @@ per part the message names], "why": one short sentence}."""
                 emit({"type": "progress", "id": pid, "done": True, "text": f"🧱 No page plan ({e}): the coder writes it"})
                 return False
             self._emit_stats(emit, "page plan", timings)
-            raw, spec_b = self._bind_plan(raw, spec, names_, asked, emit, model)
-            plan = pagebuild.clean(raw, spec_b)
+            raw, spec = self._bind_plan(raw, spec, names_, asked, emit, model)
+            plan = pagebuild.clean(raw, spec)
             if not plan["sections"]:
                 emit({"type": "progress", "id": pid, "done": True, "text": "🧱 No page plan: the coder writes it"})
                 return False
@@ -3978,8 +4004,8 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         section the plan did not write is written alone, in its place (the user, 2026-11-17: "mixing one into another
         does not look good"). Returns (the plan, the spec its sections match: a section that could not be written is
         left out of both, so each section keeps its own part)."""
-        if not names:
-            return raw, spec
+        if not names or not any(isinstance(s_, dict) and s_.get("for") for s_ in (raw or {}).get("sections") or []):
+            return raw, spec  # (a plan with no "for" at all, written without the bound schema: as before, by place)
         got = pagebuild.bind_sections(raw, names)
         rows = [x for x in spec.get("sections") or [] if isinstance(x, dict)]
         brand = ((raw or {}).get("brand") or {}).get("name", "")
@@ -3989,7 +4015,8 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         keep = [i for i, sec in enumerate(got) if sec is not None and i < len(rows)]
         if len(keep) < len(names):
             emit({"type": "note", "message": "🧱 Left out (not written): " + ", ".join(names[i] for i in range(len(names)) if i not in keep)})
-        return dict(raw or {}, sections=[got[i] for i in keep]), dict(spec, sections=[rows[i] for i in keep])
+        placed = list(spec.get("frame_items") or []) + [n_ for i in keep for n_ in rows[i].get("asks") or []]
+        return dict(raw or {}, sections=[got[i] for i in keep]), dict(spec, sections=[rows[i] for i in keep], bound=True, placed=placed)
 
     def _one_section(self, row, brand, asked, emit, model):
         """One spec section the plan did not write, written alone (its raw plan section), or None."""
@@ -4425,8 +4452,8 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
             if raw is None:
                 emit({"type": "progress", "id": pid, "done": True, "text": f"🧱 {name}: no plan ({err})"})
                 continue
-            raw, pspec_b = self._bind_plan(raw, pspec, names_, asked, emit, model)
-            plan = pagebuild.clean(raw, pspec_b)
+            raw, pspec = self._bind_plan(raw, pspec, names_, asked, emit, model)
+            plan = pagebuild.clean(raw, pspec)
             if not plan["sections"]:
                 emit({"type": "progress", "id": pid, "done": True, "text": f"🧱 {name}: no sections"})
                 continue

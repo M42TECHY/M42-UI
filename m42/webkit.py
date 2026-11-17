@@ -1495,7 +1495,10 @@ def spec_problems(spec, html):
     prediction" on a page with a rain % but no prediction)."""
     page = re.sub(r"<[^>]+>", " ", html or "").lower() + " " + (html or "").lower()
     out = []
+    placed = set((spec or {}).get("placed") or [])  # (a plan bound to the spec: each ask's section is known to be there)
     for i in (spec or {}).get("items") or []:
+        if i.get("name") in placed:
+            continue
         words = [w for w in re.findall(r"[a-z]{4,}", i["name"].lower()) if w not in SPEC_STOP]
         found = sum(w[:max(4, len(w) - 3)] in page for w in words)  # stem: "predict" in predictRain()
         # every word of a short name ("Weather prediction"); a longer one may word it its own way ("Bus route search"
@@ -1503,7 +1506,7 @@ def spec_problems(spec, html):
         long_name = len(re.findall(r"[a-z]+", i["name"].lower())) >= 3  # ("bus" is too short to be a checked word)
         if words and found < (len(words) - 1 if long_name else len(words)):
             out.append(f"The spec's item \"{i['name']}\" ({i['shows']}) is not on the page")
-    for x in (spec or {}).get("sections") or []:  # a section is there when one of its own words is (lenient)
+    for x in ((spec or {}).get("sections") or []) if not (spec or {}).get("bound") else []:  # a section is there when one of its own words is (lenient)
         words = [w for w in re.findall(r"[a-z]{4,}", x["name"].lower()) if w not in SPEC_STOP]
         if words and not any(w[:max(4, len(w) - 3)] in page for w in words):
             out.append(f"The page has no section for \"{x['name']}\" ({x['what']}): add it [{x['part']}]")

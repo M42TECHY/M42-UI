@@ -26,3 +26,8 @@ benchmark/
 m42/tests/_work/
 # the running app's local address and session token
 m42/.running-*.json
+# release files made by m42/release.py
+dist/
+# the updater: backups of the version before, its list of release files
+m42/backups/
+m42/.release-files.json

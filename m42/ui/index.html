@@ -217,6 +217,13 @@
     <h3>🎤 Speech to text</h3>
     <p class="hint">On this PC, no internet, CPU only. Each recording shows which model wrote it and how long it took.</p>
     <label>Speech model<select name="speech_engine" id="speechEngine"></select></label>
+    <h3>⬆ Updates</h3>
+    <p class="hint" id="appVersion">M42 UI</p>
+    <label class="check"><input type="checkbox" name="update_check"> Look for a newer M42 UI on GitHub when the app opens (only the version number is read; nothing about this PC is sent)</label>
+    <div class="update-actions">
+      <button type="button" class="btn small ghost" id="checkUpdate">Check now</button>
+      <button type="button" class="btn small ghost" id="undoUpdate">Go back to the version before</button>
+    </div>
     <h3>Photos for the pages</h3>
     <p class="hint">Free keys: pexels.com/api and pixabay.com/api/docs. With none, M42 UI uses free photos from StockSnap
       (CC0) and Wikimedia Commons. Every photo is credited in the site's images/CREDITS.txt.</p>

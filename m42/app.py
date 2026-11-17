@@ -37,6 +37,7 @@ import webclone  # noqa: E402
 import designref  # noqa: E402
 import llm  # noqa: E402
 import speech  # noqa: E402  (🎤 Whisper on this PC)
+import updater  # noqa: E402  (new versions from the GitHub releases)
 import browser  # noqa: E402  (a Chromium browser for the window on Linux / macOS)
 import projects  # noqa: E402
 import sessions  # noqa: E402
@@ -64,6 +65,7 @@ DEFAULT_CONFIG = {
     "pexels_key": "",
     "speech_engine": "indic-ta",  # 🎤 indic-ta (IndicConformer Tamil: Tamil and Tanglish, live, ~0.2 s) / small (Whisper small: English)
     "pixabay_key": "",
+    "update_check": True,  # look for a newer M42 UI release on GitHub when the app opens (updater.py)
     "workspace": str((APP_DIR.parent / "workspace").resolve()),
 }
 EDITABLE_KEYS = set(DEFAULT_CONFIG) - {"workspace"}
@@ -104,6 +106,7 @@ class State:
     last_kind = None  # auto mode: "chat" or "code" model used for the last message
     own_shots = set()  # 📷 pictures M42 took of its own preview (their fingerprints): a correction, not a reference
     jobs = {}  # project id -> literature matrix / gaps job status
+    server = None  # the HTTP server (an update's restart shuts it down)
 
 
 
@@ -1136,7 +1139,8 @@ class Handler(BaseHTTPRequestHandler):
                    "custom": llamacpp.AUTO_COMBOS.get(llamacpp.MY_AUTO),
                    "combos": {c["id"]: c for c in llamacpp.combos()},  # their names in the model list
                    "speech_plugin": "whisper" if speech.available() else None,  # 🎤 speech to text on this PC
-                   "speech_engines": speech.engines(), "speech_engine": State.config.get("speech_engine")}
+                   "speech_engines": speech.engines(), "speech_engine": State.config.get("speech_engine"),
+                   "update": updater.for_ui()}  # ⬆ a newer M42 UI on GitHub, and the update when one runs
             try:
                 out["models"] = llm.list_models(cfg["base_url"], cfg.get("api_key") or None)
                 remote_error = None
@@ -1155,6 +1159,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, out)
         if url.path == "/api/config":
             return self._send(200, {k: v for k, v in cfg.items()})
+        if url.path == "/api/update":  # ⬆ this version, the latest release, and the update while it runs
+            return self._send(200, updater.for_ui())
         if url.path == "/api/sessions":
             names = {p["id"]: p["name"] for p in projects.list_all()}
             chats = [dict(s, project_name=names.get(s["project_id"])) for s in sessions.list_all()]
@@ -1518,8 +1524,41 @@ class Handler(BaseHTTPRequestHandler):
             if any(State.config.get(k) != before[k] for k in PROMPT_KEYS):
                 prepare_backend()  # new model or new system prompt: (re)load and re-warm
             return self._send(200, State.config)
+        if url.path.startswith("/api/update/"):  # ⬆ the M42 UI update (updater.py)
+            return self._update_action(url.path.rsplit("/", 1)[1])
         if url.path.startswith("/api/projects/"):
             return self._project_action(url.path.rsplit("/", 1)[1], body)
+        return self._send(404, {"error": "unknown endpoint"})
+
+    def _update_action(self, action):
+        if action == "check":
+            updater.check_in_background(force=True)
+            return self._send(200, {"ok": True})
+        if action == "apply":
+            if State.agent.busy.locked():
+                return self._send(409, {"error": "M42 UI is working on a request: update when it has finished."})
+            if updater.git_checkout():
+                return self._send(409, {"error": "This folder is a git checkout: update it with git pull."})
+            updater.start_apply(updater.LATEST if updater.LATEST.get("available") else None)
+            return self._send(200, {"ok": True})
+        if action == "restart":
+            if updater.status().get("state") not in ("done", "rolled_back"):
+                return self._send(409, {"error": "There is no finished update to restart into."})
+            updater.restart(sys.argv)
+            self._send(200, {"ok": True})
+            State.agent.stop()
+            threading.Timer(0.8, State.server.shutdown).start()  # (the answer reaches the window first)
+            return None
+        if action == "rollback":
+            if State.agent.busy.locked():
+                return self._send(409, {"error": "M42 UI is working on a request: wait until it has finished."})
+            try:
+                out = updater.rollback()
+            except updater.UpdateError as e:
+                return self._send(409, {"error": str(e)})
+            updater.STATE.clear()
+            updater.STATE.update(out)
+            return self._send(200, out)
         return self._send(404, {"error": "unknown endpoint"})
 
     def _project_action(self, action, body):
@@ -2021,6 +2060,7 @@ def main():
                        "Is M42 already open? Close it first, or start M42 with --port 8770.")
         return
     server.daemon_threads = True
+    State.server = server
     url = f"http://127.0.0.1:{args.port}/?t={State.token}"
     running_file.write_text(json.dumps({"url": url, "pid": os.getpid()}), encoding="utf-8")
 
@@ -2042,6 +2082,8 @@ def main():
     if not firstrun.core_missing():
         prepare_backend()  # load the model and warm the prompt cache while the window opens
     modelhub.check_in_background(web.online)  # new models on Hugging Face: "🧩 Models · N new" in the sidebar
+    if State.config.get("update_check", True) and not args.profile:  # ⬆ a newer M42 UI release on GitHub
+        updater.check_in_background()  # (only its public version info is read; at most every 6 hours)
     if speech.available():  # 🎤 the speech model loaded now, so the first words come while the user speaks (the user,
         # 2026-11-13: the first press typed nothing live: IndicConformer loaded in 8.5 s, Whisper in ~20 s, on first use)
         threading.Thread(target=speech.start, args=(State.config.get("speech_engine"),), daemon=True).start()

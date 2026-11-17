@@ -182,7 +182,7 @@ check("looks: CSS for classes the page lacks is left out", "nothere" not in out)
 
 # 🧩 the plan bound to the spec's sections by name: order, a duplicate dropped, a missing one written alone
 import pagebuild  # noqa: E402
-SPEC = {"sections": [{"name": "menu", "part": "image_cards", "role": "offer"}, {"name": "sales", "part": "bar_chart"},
+SPEC = {"frame_items": ["Footer"], "items": [{"name": "Sales Chart", "shows": "a chart"}, {"name": "Footer", "shows": "links"}], "sections": [{"name": "menu", "part": "image_cards", "role": "offer"}, {"name": "sales", "part": "bar_chart", "asks": ["Sales Chart"]},
                      {"name": "location", "part": "table"}]}
 names = pagebuild.bound_names(SPEC)
 RAW = {"brand": {"name": "Bean Story"}, "sections": [
@@ -204,6 +204,36 @@ check("bound: no 'for' left in the plan", not any("for" in s for s in bound["sec
 plan_b = pagebuild.clean(bound, spec_b)
 check("bound: each section drawn as its spec row's part", [s["part"] for s in plan_b["sections"]][:2] == ["image_cards", "bar_chart"]
       or [s["part"] for s in plan_b["sections"]][1] == "bar_chart", [s["part"] for s in plan_b["sections"]])
+check("bound: the asks of the sections written count as on the page", set(spec_b.get("placed") or []) == {"Footer", "Sales Chart"})
+import webkit as wk  # noqa: E402
+check("bound: no word check says a placed ask is missing", not wk.spec_problems(spec_b, "<html><body>nothing</body></html>"),
+      wk.spec_problems(spec_b, "<html><body>nothing</body></html>"))
+
+# 🧩 the asks read with every one "inside" its section (a real build): taken as the section itself, each ask once
+def fake5(base, model, msgs, schema, **k):
+    props = schema["properties"]
+    if "asks" in props:
+        return {"asks": [{"item": "Sales Chart", "place": "inside sales", "part": "stats", "role": "", "name": "", "what": ""},
+                         {"item": "Gallery", "place": "inside gallery", "part": "gallery", "role": "", "name": "", "what": ""},
+                         {"item": "Menu", "place": "inside menu", "part": "cards", "role": "", "name": "", "what": ""},
+                         {"item": "Menu", "place": "inside menu", "part": "cards", "role": "", "name": "", "what": ""}],
+                "libraries": []}, {}
+    if "part" in props:
+        said = msgs[-1]["content"]
+        return {"part": "bar_chart" if "Sales" in said else "keep"}, {}
+    if "styles" in props:
+        return {"styles": []}, {}
+    return {}, {}
+
+
+llm.complete_json = fake5
+rows5 = [{"name": "menu", "part": "cards"}, {"name": "sales", "part": "stats"}, {"name": "gallery", "part": "gallery"}]
+spec5 = {"items": [{"name": "Sales Chart", "shows": "bar chart of sales"}, {"name": "Gallery", "shows": "photos"},
+                   {"name": "Menu", "shows": "drinks"}]}
+out5 = ag._landing_asks("coffee page with a sales chart, a gallery and the menu", spec5, rows5, emit, None)
+check("all-inside: the sales section drawn as the chart asked", next(r for r in out5 if "Sales Chart" in (r.get("asks") or []))["part"] == "bar_chart",
+      [(r["name"], r["part"]) for r in out5])
+check("all-inside: each ask once in its section", [r.get("asks") for r in out5] == [["Menu"], ["Sales Chart"], ["Gallery"]], [r.get("asks") for r in out5])
 
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)

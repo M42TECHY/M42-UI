@@ -2360,6 +2360,7 @@ async function checkStatus() {
     $("openModels").textContent = s.models_new ? `🧩 Models · ${s.models_new} new` : "🧩 Models";
     $("openModels").classList.toggle("has-new", !!s.models_new);
     fillModelSelect(s.model);
+    showUpdate(s.update);  // ⬆ a newer M42 UI on GitHub (updater.py)
     speechPlugin = s.speech_plugin || null;  // 🎤 only when a speech-to-text plugin is installed
     speechEngines = s.speech_engines || [];
     speechEngine = s.speech_engine || (speechEngines[0] || {}).id || "";
@@ -2730,6 +2731,99 @@ async function saveSettings() {
   await post("/api/config", out);
   checkStatus();
 }
+
+// ---------------------------------------------------------------- ⬆ M42 UI updates (updater.py)
+// A newer release on GitHub: a note with what is new and an Update button; the download and the new files go in
+// while the note shows how far it is; then "Restart now". Models, chats, projects and settings stay.
+
+let updateTimer = null;
+const UPDATE_RUNNING = ["downloading", "installing", "packages"];
+
+function showUpdate(u) {
+  if (!u) return;
+  const v = $("appVersion");
+  if (v) v.textContent = `This is M42 UI ${u.current}` + (u.git ? " (a git checkout: update it with git pull)"
+    : u.available ? ` · ${u.latest} is out` : u.checked && !u.error ? " · the latest version" : u.error ? ` · ${u.error}` : "");
+  const job = u.job || {};
+  const running = UPDATE_RUNNING.includes(job.state);
+  const finished = ["done", "rolled_back", "error"].includes(job.state);
+  let later = "";
+  try { later = localStorage.getItem("m42-update-later") || ""; } catch { /* (no storage: the note shows again) */ }
+  let n = document.querySelector(".m42-update-note");
+  if (!running && !finished && (!u.available || u.git || later === u.latest)) { if (n) n.remove(); return; }
+  if (!n) {
+    n = document.createElement("div");
+    n.className = "m42-setup-note m42-update-note";
+    document.body.appendChild(n);
+  }
+  n.innerHTML = "";
+  const words = document.createElement("div");
+  const title = document.createElement("b");
+  const text = document.createElement("span");
+  const buttons = document.createElement("div");
+  words.className = "upd-text"; buttons.className = "upd-btns";
+  words.append(title, text);
+  n.append(words, buttons);
+  const button = (label, ghost, fn) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = label; if (ghost) b.className = "ghost"; b.onclick = fn;
+    buttons.append(b);
+  };
+  if (running) {
+    const pct = job.total ? Math.floor(job.done * 100 / job.total) : 0;
+    title.textContent = `Updating M42 UI to ${u.latest || "the new version"}`;
+    text.textContent = job.state === "downloading" ? `Downloading… ${pct}%`
+      : job.state === "packages" ? "Installing the new Python packages…" : "Putting the new files in place…";
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(pollUpdate, 1000);
+  } else if (job.state === "done" || job.state === "rolled_back") {
+    title.textContent = job.state === "done" ? `M42 UI ${job.to} is installed` : `Back to M42 UI ${job.to}`;
+    text.textContent = "Restart M42 UI to use it. Your chats, projects, models and settings are as they were." +
+      (String(job.packages || "").startsWith("error") ? " The new Python packages did not install: run the installer again after the restart." : "");
+    button("Restart now", false, restartForUpdate);
+  } else if (job.state === "error") {
+    title.textContent = "The update stopped";
+    text.textContent = `${job.error || ""} Nothing of yours is lost; you can try again.`;
+    button("Try again", false, startUpdate);
+    button("Close", true, () => n.remove());
+  } else {
+    title.textContent = `M42 UI ${u.latest} is available (you have ${u.current})`;
+    text.textContent = (u.notes || "").split("\n").filter((l) => !/^\s*#/.test(l))  // (headings left out)
+      .map((l) => l.replace(/^[*\-\s]+/, "").trim()).filter(Boolean)
+      .slice(0, 3).join(" · ").slice(0, 280) || "A newer version is on GitHub.";
+    button("Update", false, startUpdate);
+    if (u.url) button("What's new", true, () => window.open(u.url, "_blank", "noopener"));
+    button("Later", true, () => { try { localStorage.setItem("m42-update-later", u.latest); } catch { /* */ } n.remove(); });
+  }
+}
+
+async function pollUpdate() {
+  try { showUpdate(await api("/api/update")); } catch { /* (the app restarting: the new window takes over) */ }
+}
+
+async function startUpdate() {
+  try { await post("/api/update/apply"); } catch (e) { return showError(e.message); }
+  pollUpdate();
+}
+
+async function restartForUpdate() {
+  try { await post("/api/update/restart"); } catch (e) { return showError(e.message); }
+  const n = document.querySelector(".m42-update-note");
+  if (n) n.innerHTML = "<b>Restarting M42 UI…</b><span>A new window opens in a few seconds; this one closes.</span>";
+  setTimeout(() => window.close(), 2500);
+}
+
+$("checkUpdate").addEventListener("click", async () => {
+  $("appVersion").textContent = "Looking for a newer M42 UI on GitHub…";
+  try { localStorage.removeItem("m42-update-later"); } catch { /* */ }
+  await post("/api/update/check").catch((e) => showError(e.message));
+  setTimeout(pollUpdate, 2500);
+});
+$("undoUpdate").addEventListener("click", async () => {
+  if (!confirm("Go back to the M42 UI version before the last update? Your chats, projects and models stay.")) return;
+  try { showUpdate(Object.assign(await api("/api/update"), { job: await post("/api/update/rollback") })); }
+  catch (e) { showError(e.message); }
+});
 
 // ---------------------------------------------------------------- wiring
 

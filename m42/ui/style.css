@@ -931,3 +931,11 @@ dialog::backdrop { background: rgba(8, 10, 16, .55); backdrop-filter: blur(3px);
 .lesson-ask { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .lesson-ask .lesson-q { opacity: .8; }
 .lesson-ask .lesson-btns { display: inline-flex; gap: 6px; }
+
+/* ⬆ Settings: Check now / Go back (updater.py) */
+.update-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
+.m42-update-note { flex-wrap: wrap; width: min(640px, calc(100vw - 32px)); }
+.m42-update-note .upd-text { flex: 1 1 260px; display: flex; flex-direction: column; gap: 3px; line-height: 1.4; }
+.m42-update-note .upd-text span { opacity: .8; font-size: 13px; }
+.m42-update-note .upd-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.m42-update-note button.ghost { background: transparent; color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
