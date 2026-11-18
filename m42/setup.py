@@ -7,7 +7,7 @@ will download with the sizes, asks, downloads, makes the launcher, and starts th
     python m42/setup.py --tier 2b    the 2B whatever the PC (or --tier 4b)
     python m42/setup.py --no-speech  no speech models (the mic button stays off)
     python m42/setup.py --no-start   do not start the app at the end
-    python m42/setup.py --3d-pack    the optional 3D pack too (~120 MB; asked, "no" by default)
+    python m42/setup.py --3d-pack    the optional 3D pack too (~20 MB download, ~140 MB on disk; asked, "no" by default)
     python m42/setup.py --models-dir E:/M42-models   where the models go (asked otherwise, once on a PC)
 Only the standard library is used here (firstrun.py)."""
 import argparse
@@ -101,7 +101,7 @@ def three_d_pack(a):
     import pack3d
     if pack3d.status()["installed"] or a.no_3d_pack:
         return
-    print(f"\n  3D pack  about {pack3d.SIZE_MB} MB: ~850 free low-poly models (restaurant, hospital, office, lab, hotel,"
+    print(f"\n  3D pack  about {pack3d.SIZE_MB} MB download ({pack3d.DISK_MB} MB on disk): ~850 free low-poly models (restaurant, hospital, office, lab, hotel,"
           "\n           city, cars, farm...) for the 3D landing pages. Polyfork, CC BY 4.0. Optional: the app works without it.")
     if not (a.three_d_pack or ask("  Download the 3D pack too?", a.yes, default=False)):
         print("  (Later: python m42/pack3d.py install)")
@@ -158,7 +158,7 @@ def main():
     ap.add_argument("--tier", choices=list(firstrun.TIERS))
     ap.add_argument("--no-speech", action="store_true")
     ap.add_argument("--no-start", action="store_true")
-    ap.add_argument("--3d-pack", dest="three_d_pack", action="store_true", help="download the optional 3D pack (~120 MB)")
+    ap.add_argument("--3d-pack", dest="three_d_pack", action="store_true", help="download the optional 3D pack (~20 MB download)")
     ap.add_argument("--no-3d-pack", dest="no_3d_pack", action="store_true")
     ap.add_argument("--models-dir", dest="models_dir", help="the folder the models go to")
     a = ap.parse_args()

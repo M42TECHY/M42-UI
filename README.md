@@ -247,7 +247,7 @@ You can always choose the other one.
      language) and the voice detector.
 
    Each file is checked by its size and SHA-256, and a broken download resumes when you run it again.
-5. Offers the **optional 3D pack** (about 120 MB, "no" by default): about 850 free low-poly models from
+5. Offers the **optional 3D pack** (about 20 MB to download, 140 MB on disk, "no" by default): about 850 free low-poly models from
    [Polyfork](https://polyfork.dev) (CC BY 4.0) for the 3D landing pages: restaurant, hospital, office, lab,
    university, hotel, city, airport, cars, farm and more. A page that uses one credits it in its footer.
 6. Makes the launcher and starts M42 UI.

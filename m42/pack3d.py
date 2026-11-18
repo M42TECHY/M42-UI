@@ -42,7 +42,8 @@ KITS = ["Modern Restaurant Cafe kit", "Hospital kit", "Office", "Research Lab", 
         "New York City Kit", "Airport", "Retro Cars Kit", "3D UI kit", "Construction Site", "Nature & Forest Kit",
         "Cozy Farm", "Symphony Stagecraft kit"]
 MAX_TRIANGLES = 15000  # (a web page's scene: the few heavier ones stay out)
-SIZE_MB = 120  # about, for the installer's question
+SIZE_MB = 20  # the download, about (the GLBs pack well); about 140 MB once unpacked
+DISK_MB = 140
 
 
 def _snake(text):
@@ -233,7 +234,7 @@ def main(argv):
     elif cmd == "zip":
         make_zip()
     elif cmd == "install":
-        if not yes and input(f"Download the 3D pack (about {SIZE_MB} MB, ~850 free models, CC BY 4.0)? [Y/n] ").strip().lower() in ("n", "no"):
+        if not yes and input(f"Download the 3D pack (about {SIZE_MB} MB download, {DISK_MB} MB on disk, ~850 free models, CC BY 4.0)? [Y/n] ").strip().lower() in ("n", "no"):
             return 0
         try:
             st = install(_bar)
