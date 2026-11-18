@@ -80,7 +80,7 @@ card the model runs on the card, so a build can be faster.
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/firecrackers-landing.webp" alt="Firecrackers shop landing page"><br><img src="docs/icons/party-popper.svg" width="18" height="18" alt=""> <b>Firecrackers shop</b> · landing page</td>
-    <td width="50%"></td>
+    <td width="50%"><img src="docs/screenshots/iot-smart-home.webp" alt="Smart home IoT dashboard"><br><img src="docs/icons/wifi.svg" width="18" height="18" alt=""> <b>Smart home IoT</b> · dashboard</td>
   </tr>
 </table>
 
