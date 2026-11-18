@@ -226,6 +226,10 @@ M42 UI. Next time, start it with the launcher:
 
 You can always choose the other one.
 
+> [!NOTE]
+> The 2B is a smaller model, so its pages can be a little less accurate than the 4B's (layout, text, following
+> every detail you asked for). If your PC has 16 GB RAM, the 4B gives the best results.
+
 <details>
 <summary><img src="docs/icons/settings-2.svg" width="18" height="18" alt=""> <b>What the installer does, step by step</b></summary>
 
