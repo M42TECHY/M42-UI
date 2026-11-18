@@ -774,6 +774,8 @@ body.m42-app { background: var(--m42-bg); --m42-muted: #556173; }  /* plain back
 .m42-w-device { padding: 1rem; border-radius: var(--m42-radius); background: var(--m42-surface); border: 1px solid var(--m42-border); display: grid; gap: .4rem;
   transition: opacity .3s; } .m42-w-device > div i { font-size: 2.2rem; color: var(--m42-accent-ink, var(--m42-accent)); }
 .m42-w-device small { color: var(--m42-muted); } .m42-w-device.is-off { opacity: .55; } .m42-w-device.is-off > div i { color: var(--m42-muted); }
+.m42-w-device-photo { margin: -1rem -1rem .3rem; border-radius: var(--m42-radius) var(--m42-radius) 0 0; overflow: hidden; aspect-ratio: 16 / 10; }
+.m42-w-device-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .m42-w-device .form-check-input, .m42-w-switches .form-check-input { cursor: pointer; }
 .m42-ui .form-check-input:checked { background-color: var(--m42-accent); border-color: var(--m42-accent); }
 .m42-ui .form-range::-webkit-slider-thumb { background: var(--m42-accent); } .m42-ui .form-range::-moz-range-thumb { background: var(--m42-accent); }

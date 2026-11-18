@@ -849,7 +849,9 @@ def w_device_cards(sec, ctx):
     for k, i in enumerate(items(sec, 8)):
         on = not re.search(r"off|idle|inactive|no", str(i.get("badge") or "on"), re.I)
         sid = pb.slug((i.get("title") or "device") + "-sw", ctx["ids"])
-        cards.append(f'<div class="m42-w-device{"" if on else " is-off"}"><div class="d-flex justify-content-between align-items-start">'
+        cards.append(f'<div class="m42-w-device{"" if on else " is-off"}{" has-photo" if photo(i) else ""}">'
+                     + (f'<div class="m42-w-device-photo">{photo(i)}</div>' if photo(i) else "")  # (a photo asked for: on top)
+                     + f'<div class="d-flex justify-content-between align-items-start">'
                      f'<i class="bi {ic(i.get("icon"), "bi-lightning-charge")}"></i><div class="form-check form-switch m-0"><input class="form-check-input" '
                      f'type="checkbox" role="switch" id="{sid}" data-m42-device{" checked" if on else ""} aria-label="{e(i.get("title"))} on / off"></div></div>'
                      f'<b>{e(i.get("title"))}</b><small>{e(i.get("text") or ("On" if on else "Off"))}</small></div>')

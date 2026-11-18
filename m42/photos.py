@@ -246,6 +246,16 @@ def add_to_plan(plan, request, root, keys, emit=None, cache=None):
             got = _one(where, q[:-len(subj)].strip(), wide, width)  # ("Sunset Cruise hotel": nothing; "Sunset Cruise")
             if got[2]:
                 got[2]["query"] = q
+        if got[1] is None and where[0] == "sections" and len(where) == 4:  # (the card's own name alone: the 4B's
+            # "master bedroom ceiling fan spinning" found nothing, "Ceiling Fan" finds nine, 2026-11-18)
+            try:
+                own = str(plan["sections"][where[1]]["items"][where[3]].get("title") or "").strip()
+            except (IndexError, KeyError, TypeError):
+                own = ""
+            if own and " ".join(own.lower().split()) != " ".join(q.lower().split()):
+                got = _one(where, own, wide, width)
+                if got[2]:
+                    got[2]["query"] = q
         return got
 
     def _one(where, q, wide, width):

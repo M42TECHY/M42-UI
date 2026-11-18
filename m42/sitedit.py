@@ -197,6 +197,7 @@ Answer {{"changes": [...]}}, one entry per separate change (most requests are on
   edit_section: change a section's content (its words, items, numbers, title, add or remove an item in it);
   add_section: a new section (part = its kind; position = the number it will have: before section 2 is 2, after
   section 2 is 3, -1 = at the end; "munnadi" / "mela" / "before" = before, "apram" / "keela" / "after" = after);
+  never for a thing put INTO the top menu bar, the sidebar, the page's header or the footer (that is other);
   remove_section: take a WHOLE section away ("Recent Leads remove pannu", "intha section venaam"); taking an item
   out of a section is edit_section with items "remove";
   move_section: put a section elsewhere (position = its new number);
@@ -236,7 +237,9 @@ Answer {{"changes": [...]}}, one entry per separate change (most requests are on
   other: anything else on the page (a word in the menu, a button's colour or size, ONE thing inside a section moved:
   "X card la Y button ah right side la vai" is other, not resize_section), and how a section LOOKS: its
   CSS, style, colours inside it, spacing, how things inside it line up ("table css sariya varala", "cards align
-  aagala"): the content stays, so not edit_section or change_widget.
+  aagala"): the content stays, so not edit_section or change_widget. Also anything added to or changed in the top
+  menu bar, the sidebar, the page's header or the footer (a clock, a badge, a status light, a search box, a link):
+  other, with section = -1.
 - section: the section's number on that page (-1 when none). "this / that / same section", "intha / antha section"
   is the one changed last (named with the site, when there is one); so is a follow-up that names no section ("innum 3 add pannu", "add 3 more", "one more").
 - part: for add_section / change_widget, else "".

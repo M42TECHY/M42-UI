@@ -320,6 +320,14 @@
     });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", modalsToBody); else modalsToBody();
+  // Bootstrap's tooltips and popovers work only once made: every one on the page made (a tooltip asked for in an edit
+  // was on its button and never showed, 2026-11-18)
+  function tips() {
+    if (!window.bootstrap) return;
+    [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]')).forEach(function (t) { if (bootstrap.Tooltip) bootstrap.Tooltip.getOrCreateInstance(t); });
+    [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]')).forEach(function (t) { if (bootstrap.Popover) bootstrap.Popover.getOrCreateInstance(t); });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tips); else tips();
   // charts drawn by Chart.js when the user named it (widgets._chartjs): the page's own colours, its font
   function chartjs() {
     if (!window.Chart) return;

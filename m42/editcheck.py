@@ -12,6 +12,7 @@ No word lists here: facts only (a picture's size on the page, a card's words, wh
 """
 import contextlib
 import html as htmlmod
+import difflib
 import json
 import os
 import re
@@ -45,6 +46,13 @@ var nth={};var out=secs.map(function(s,i){var tg=s.tagName.toLowerCase();var ti=
   block:s.getAttribute('data-m42-block')||s.getAttribute('data-m42-comp')||'',
   text:txt(s).slice(0,1200),imgs:imgs.slice(0,16),cards:cards,
   buttons:[].slice.call(s.querySelectorAll('a.m42-btn,a.m42-btn-ghost,button,.btn')).map(txt).filter(Boolean).slice(0,8),
+  charts:[].slice.call(s.querySelectorAll('canvas,.m42-w-chart,svg.m42-w-line')).map(function(c){
+   var C=window.Chart&&c.tagName==='CANVAS'&&Chart.getChart(c);
+   if(C){var d=C.data||{};var n=(d.datasets||[]).map(function(x){return (x.data||[]).filter(function(v){return +v>0;}).length;});
+    return C.config.type+' chart: '+(d.labels||[]).length+' labels ('+(d.labels||[]).slice(0,5).join(', ')+'), '+(d.datasets||[]).length+' series, '+(n[0]||0)+' values drawn';}
+   if(c.tagName==='CANVAS')return 'a canvas (no chart drawn on it)';
+   return 'a chart: '+c.querySelectorAll('.m42-w-bar,path,circle').length+' bars / points';}).slice(0,4),
+  tips:[].slice.call(s.querySelectorAll('[data-bs-toggle=tooltip],[data-bs-toggle=popover]')).map(function(t){return (txt(t)||t.tagName.toLowerCase())+' -> '+(t.getAttribute('data-bs-title')||t.getAttribute('title')||t.getAttribute('data-bs-original-title')||t.getAttribute('data-bs-content')||'').slice(0,40);}).slice(0,6),
   reveal:own||pageReveal,own_reveal:own||'',hover:ownH||pageHover,own_hover:ownH||'',
   moving:R?R.items(s).length:0,hovering:R?R.hoverItems(s).length:0,
   top:Math.round(r.top+sy),height:Math.round(r.height)};});
@@ -54,9 +62,12 @@ var page={motion:H.getAttribute('data-m42-motion')||'',reveal:pageReveal,hover:p
  accent:(cs.getPropertyValue('--m42-accent')||cs.getPropertyValue('--bs-primary')||'').trim(),
  bg:bs.backgroundColor,font:(bs.fontFamily||'').split(',')[0],
  brand:txt(document.querySelector('.navbar-brand,.m42-brand')).slice(0,60),title:document.title,
+ tips:[].slice.call(document.querySelectorAll('[data-bs-toggle=tooltip],[data-bs-toggle=popover]')).map(function(t){return (txt(t)||t.tagName.toLowerCase()).slice(0,30)+' -> '+(t.getAttribute('data-bs-title')||t.getAttribute('title')||t.getAttribute('data-bs-original-title')||t.getAttribute('data-bs-content')||'').slice(0,40);}).slice(0,8),
  height:Math.round(Math.max(H.scrollHeight,document.body.scrollHeight))};
 var B=[].slice.call(document.querySelectorAll('[data-bs-toggle=modal]')).slice(0,4),k=0;
-function done(){var p=document.createElement('pre');p.id='__m42_facts';p.style.display='none';
+function done(){setTimeout(function(){out.forEach(function(o,i){var t1=txt(secs[i]).slice(0,1200);
+ if(t1!==o.text){var a=o.text,b=t1,k=0;while(k<a.length&&a[k]===b[k])k++;k=Math.max(0,k-8);o.live=a.slice(k,k+24)+' -> '+b.slice(k,k+24);}});write();},1200);}
+function write(){var p=document.createElement('pre');p.id='__m42_facts';p.style.display='none';
 p.textContent=JSON.stringify({page:page,sections:out});document.body.appendChild(p);}
 function next(){if(k>=B.length)return done();var b=B[k++],sec=b.closest('header,section,footer,nav'),key=sec?(sec.id||''):'';
 if(sec&&!sec.style.transform)sec.style.transform='translateY(0px)';try{b.click();}catch(x){}setTimeout(function(){var m=document.querySelector(b.getAttribute('data-bs-target')||'#__none'),
@@ -232,13 +243,16 @@ def describe(s):
             + (f' ({len(loose)} outside the cards: ' + ", ".join(f'{im["src"].split("/")[-1]} {im["w"]}x{im["h"]}' for im in loose[:3]) + ")" if loose else "")
             + f"; {cards}"
             + (f'; buttons: {", ".join(s["buttons"][:5])}' if s["buttons"] else "")
+            + (f'; tooltips on hover (not seen in a picture): {"; ".join(s["tips"])}' if s.get("tips") else "")
+            + (f'; charts: {"; ".join(s["charts"])}' if s.get("charts") else "")
+            + (f'; its text changes by itself while the page is open (live: {s["live"]})' if s.get("live") else "")
             + ("; popups: " + "; ".join(f'"{q["button"]}" ' + (("opens a form that can be typed in" if q["typeable"] else
                                                                      f'opens a form COVERED by {q["cover"] or "something"}: it cannot be typed in')
                                                                     if q["field"] else "opens" if q["opens"] else "does NOT open")
                                        for q in s.get("popups") or []) if s.get("popups") else "")
             + f'; comes in with "{s["reveal"]}"' + (" (its own)" if s["own_reveal"] else " (as the page)")
-            + f', {s["moving"]} of its things move in; hover "{s["hover"]}"' + (" (its own)" if s["own_hover"] else " (as the page)")
-            + f', {s["hovering"]} things react to the mouse; {s["height"]} px tall')
+            + f', {s["moving"]} of its things move in; its cards\' hover effect "{s["hover"]}"' + (" (its own)" if s["own_hover"] else " (as the page)")
+            + f', on {s["hovering"]} cards (tooltips are listed apart); {s["height"]} px tall')
 
 
 def compare(before, after, targets=()):
@@ -249,6 +263,9 @@ def compare(before, after, targets=()):
     pb, pa = (before or {}).get("page") or {}, (after or {}).get("page") or {}
     page_d = [f"{k} {pb.get(k)!r} -> {pa.get(k)!r}" for k in ("theme", "accent", "bg", "font", "brand", "title", "reveal", "hover", "hero_in", "motion")
               if pb.get(k) != pa.get(k)]
+    if (pb.get("tips") or []) != (pa.get("tips") or []):  # (a tooltip shows only on hover: never in a picture)
+        page_d.append("tooltips on hover " + json.dumps(pb.get("tips") or [], ensure_ascii=False) + " -> "
+                      + json.dumps(pa.get("tips") or [], ensure_ascii=False))
     if page_d:
         tl.append("The whole page: " + "; ".join(page_d))
     for key in list(dict.fromkeys(list(b) + list(a))):
@@ -272,11 +289,27 @@ def compare(before, after, targets=()):
                 d.append("words no longer shown: " + ", ".join(gone[:18]) + (" ..." if len(gone) > 18 else ""))
             if new:
                 d.append("new words: " + ", ".join(new[:18]) + (" ..." if len(new) > 18 else ""))
+            if (not gone and not new or any(any(ch.isdigit() for ch in w) for w in new))                     and " ".join(x["text"].split()) != " ".join(y["text"].split()):
+                # (numbers, times, signs: a clock's "07:10:36" is no word, and the bar it was added to read "NOTHING
+                # changed", 2026-11-18): what was added or taken out, as text
+                sm = difflib.SequenceMatcher(None, x["text"], y["text"], autojunk=False)
+                adds = [y["text"][j1:j2].strip() for op, _i1, _i2, j1, j2 in sm.get_opcodes() if op in ("insert", "replace")]
+                dels = [x["text"][i1:i2].strip() for op, i1, i2, _j1, _j2 in sm.get_opcodes() if op in ("delete", "replace")]
+                if any(adds):
+                    d.append("new text: " + " | ".join(t for t in adds if t)[:160])
+                if any(dels):
+                    d.append("text no longer shown: " + " | ".join(t for t in dels if t)[:160])
             if x["buttons"] != y["buttons"]:
                 d.append(f'buttons {x["buttons"][:5]} -> {y["buttons"][:5]}')
             for f in ("reveal", "hover"):
                 if x[f] != y[f]:
                     d.append(f"{f} {x[f]!r} -> {y[f]!r}")
+            if y.get("live") and not x.get("live"):
+                d.append(f'its text now changes by itself while the page is open (live: {y["live"]})')
+            if (x.get("charts") or []) != (y.get("charts") or []):
+                d.append("charts " + json.dumps(x.get("charts") or []) + " -> " + json.dumps(y.get("charts") or []))
+            if (x.get("tips") or []) != (y.get("tips") or []):
+                d.append("tooltips " + json.dumps(x.get("tips") or []) + " -> " + json.dumps(y.get("tips") or []))
             if (x.get("popups") or []) != (y.get("popups") or []):
                 d.append("popups " + json.dumps(x.get("popups") or []) + " -> " + json.dumps(y.get("popups") or []))
             if x["moving"] != y["moving"]:
@@ -285,7 +318,10 @@ def compare(before, after, targets=()):
                 d.append(f'height {x["height"]} -> {y["height"]} px')
             if not d:
                 if key in targets:
-                    tl.append(f'"{y["title"] or key}": NOTHING changed: {describe(y)}')
+                    tl.append(f'"{y["title"] or key}": ' + ("unchanged itself; the change is elsewhere on the page (the whole page's "
+                                                            "line above)" if page_d else "NOTHING changed")
+                              + f': {describe(y)}')  # (a tooltip on a button outside every part: "NOTHING changed" for the
+                    # part asked about made the judge undo a tooltip that was there, 2026-11-18)
                 continue
             line = f'"{y["title"] or key}": ' + "; ".join(d)
         if key in targets:

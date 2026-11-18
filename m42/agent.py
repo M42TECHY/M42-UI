@@ -4326,12 +4326,22 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
         its = [i for i in sec.get("items") or [] if isinstance(i, dict)]
         part = want or sec.get("part")
         if part in ("line_chart", "area_chart", "bar_chart"):
-            if len(sec.get("labels") or []) < 5 or not any(len(i.get("values") or []) >= 5 for i in its):
-                return "a chart needs its x labels (5-12: hours, days or months) and each series' values, one per label"
+            # (a bar chart of things side by side, "water use per room", has 3-4 labels: rooms, not months, 2026-11-18)
+            least = 3 if part == "bar_chart" else 5
+            n_ = len(sec.get("labels") or [])
+            if n_ < least or not any(len(i.get("values") or []) >= least for i in its):
+                return (f"a chart needs its x labels ({least}-12: the things compared, or hours, days, months) and each "
+                        "series' values, one number per label")
         elif part in ("data_table", "table"):
-            if len(sec.get("labels") or []) < 4 or sum(1 for i in its if len(i.get("meta") or []) >= 2) < len(its) / 2 or \
+            # (the columns the user names are the table's: "Scene, Trigger and Status" is three, and a rule of 4-6 threw
+            # the rewrite away: two headers were missing, 2026-11-18): the first is the row's title, the last its
+            # status (badge), the ones between its cells (meta)
+            n_ = len(sec.get("labels") or [])
+            cells = max(1, n_ - 2)
+            if n_ < 3 or sum(1 for i in its if len(i.get("meta") or []) >= cells) < len(its) / 2 or \
                     sum(1 for i in its if i.get("badge")) < len(its) / 2:
-                return "a table needs 4-6 column names, each row's cells (meta: date / time, who, type...) and a status word (badge)"
+                return ("a table needs 3-6 column names (the user's own when they name them), each row's cells (meta: one "
+                        "per column between the first and the last) and a status word (badge) for the last column")
         elif part == "invoice":
             heads = [i.get("title") for i in its if Agent.BILL_HEAD_RX.match(str(i.get("title") or "").strip())]
             if heads:  # (POS run 3: the lines were "Customer, Item, Quantity, Rate, Subtotal, Tax, Total...")
@@ -4354,8 +4364,27 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
     SHAPES = {"invoice": "items = the things on this bill, 3-8 of them, each {\"title\": a thing this business sells, \"value\": its rate, "
                          "\"unit\": the currency sign, \"meta\": [its quantity as a number]}; labels = []. Never a column name, a subtotal, "
                          "a tax, a discount or a total as a line: the widget draws those.",
-              "data_table": "labels = 4-6 column names; items = rows, each {\"title\": the first cell, \"meta\": [the other cells in "
-                            "the columns' order but the last], \"badge\": a status word (Paid, Pending...)}."}
+              "data_table": "labels = 3-6 column names (exactly the user's, when they name them); items = rows, each {\"title\": the "
+                            "first cell, \"meta\": [the other cells in the columns' order but the last], \"badge\": the last "
+                            "column's word (a status: Paid, Pending, Active...)}.",
+              "bar_chart": "labels = the x labels: the things compared (rooms, products, branches: 3-8) or days / months (5-12); "
+                           "items = 1-3 series, each {\"title\": what is measured, \"values\": [one number per label, in the labels' order], "
+                           "\"unit\": its unit}.",
+              "line_chart": "labels = 5-12 x labels (hours, days or months, in order); items = 1-3 series, each {\"title\": what is "
+                            "measured, \"values\": [one number per label], \"unit\": its unit}.",
+              "area_chart": "labels = 5-12 x labels (hours, days or months, in order); items = 1-3 series, each {\"title\": what is "
+                            "measured, \"values\": [one number per label], \"unit\": its unit}."}
+
+    @staticmethod
+    def _distinct_labels(its):
+        """A chart's labels from its items: their titles, or, when those are all one ("Water Consumption" five times),
+        the first of their other words that tells them apart (their text, their first tag), else 1..n."""
+        for get in (lambda i: i.get("title"), lambda i: i.get("text"), lambda i: (i.get("tags") or [""])[0],
+                    lambda i: (i.get("meta") or [""])[0]):
+            got = [" ".join(str(get(i) or "").split())[:24] for i in its][:12]
+            if all(got) and len(set(got)) == len(got):
+                return got
+        return [str(k) for k in range(1, min(len(its), 12) + 1)]
 
     def _repair_app_data(self, plan, sec, part):
         """M42's own repair when the 4B's rewrite is still short (no third model call): a bill keeps its real lines and
@@ -4383,6 +4412,20 @@ About 90 words, plain sentences, no title. things: the things the story shows, a
                     i["meta"] = [str((1, 2, 1, 3, 2, 1, 4, 2)[k % 8])] + m[1:]
             if len(lines) >= 3:
                 sec["items"] = lines[:8]
+        elif part in ("line_chart", "area_chart", "bar_chart"):  # (things with one number each: their names the labels,
+            # their numbers one series; a series with values but no labels: labels 1..n)
+            with_v = [i for i in its if isinstance(i.get("value"), (int, float)) and i.get("title")]
+            if len(with_v) >= 3 and not any(i.get("values") for i in its):
+                sec["labels"] = self._distinct_labels(with_v)
+                sec["items"] = [{"title": sec.get("title") or "Value", "values": [i["value"] for i in with_v][:12],
+                                 "unit": next((i.get("unit") for i in with_v if i.get("unit")), "")}]
+            else:
+                longest = max([len(i.get("values") or []) for i in its] or [0])
+                labels_ = [str(x) for x in sec.get("labels") or []]
+                if labels_ and len(set(labels_)) == 1 and len(labels_) > 1:  # (five bars all named "Water Consumption")
+                    sec["labels"] = [str(k) for k in range(1, len(labels_) + 1)]
+                if longest >= 3 and len(sec.get("labels") or []) < longest:
+                    sec["labels"] = [str(x) for x in (sec.get("labels") or [])] + [str(k) for k in range(len(sec.get("labels") or []) + 1, longest + 1)]
         elif part in ("data_table", "table"):
             n = max([len(i.get("meta") or []) for i in its] or [0])
             if len(sec.get("labels") or []) < 4 and n >= 2:
@@ -5191,6 +5234,8 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
     # parts that draw a list of things without photos: a list of products asked to show photos becomes cards with them
     NO_PHOTO_LISTS = {"progress_list", "list_thumbs", "task_list", "chips", "table", "data_table", "hbars", "stats"}
 
+    PHOTO_ON_ASK = {"device_cards"}  # (parts that draw an item's photo when one is asked for; a build gives them none)
+
     def _photos_for_cards(self, root, site, pg, k, ch, emit):
         """📷 Photos for a section's cards, asked in an edit ("Firecracker Set card la image potu", "products list-la image
         varala", 2026-11-16: M42 could only rewrite the words, and once turned the products into progress bars): the
@@ -5203,7 +5248,7 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
         if not self._web_enabled():
             return f'{pg["file"]}: photos need the internet (web search is off in Settings)'
         changed_part = ""
-        if sec.get("part") not in photos.PHOTO_PARTS:
+        if sec.get("part") not in photos.PHOTO_PARTS and sec.get("part") not in self.PHOTO_ON_ASK:
             if sec.get("part") in self.NO_PHOTO_LISTS and len(sec.get("items") or []) >= 2:
                 changed_part, sec["part"] = sec["part"], "image_cards"
                 for key in ("_block", "_comp", "_comp_alts"):
@@ -5212,6 +5257,7 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
                 if k < len(specs) and isinstance(specs[k], dict):
                     specs[k] = dict(specs[k], part="image_cards")
             else:
+                emit({"type": "note", "message": f'📷 "{sec.get("title") or sec.get("part")}" ({sec.get("part")}) has no place for photos'})
                 return ""
         wanted_items = [i - 1 for i in ch.get("items_at") or [] if isinstance(i, int) and i >= 1]  # (the 4B's, 1-based)
         items = [it for i, it in enumerate(sec.get("items") or []) if isinstance(it, dict)
@@ -5220,7 +5266,10 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
             return ""
         for it in items:  # (asked again: a new photo, not the one there)
             it.pop("photo", None)
-        sub = {"hero": {}, "sections": [dict(sec, items=items)]}  # (the same item dicts: their photos land in the plan)
+        # (the same item dicts: their photos land in the plan; a part that draws photos only when asked is searched as
+        # photo cards: the search looks at photo parts only, and a device's photo was never looked for, 2026-11-18)
+        as_part = "image_cards" if sec.get("part") in self.PHOTO_ON_ASK else sec.get("part")
+        sub = {"hero": {}, "sections": [dict(sec, items=items, part=as_part)]}
         asked = site.get("asked", "")
         keys = {key: self.config.get(key) for key in ("pexels_key", "pixabay_key")}
         emit({"type": "progress", "id": "ephotos_" + uuid.uuid4().hex[:6], "done": True,
@@ -5235,7 +5284,7 @@ Answer {"wrong": "" or what is wrong and what the user really asks, in one sente
                 # business's own subject once more, each photo still looked at against its card
                 for it in left:
                     it["_q"] = f'{it.get("title") or ""} {subj}'.strip() if subj.lower() not in str(it.get("title") or "").lower() else subj
-                sub2 = {"hero": {}, "sections": [dict(sec, items=left)]}
+                sub2 = {"hero": {}, "sections": [dict(sec, items=left, part=as_part)]}
                 more = photos.add_to_plan(sub2, asked, root, keys, emit)
                 if not more:
                     for it in left:
@@ -5280,6 +5329,9 @@ it does not show, shows something else, or the part lost what it had (its words,
 user did not ask to take away. Judge only what the user asked: a detail they did not ask for is never missing.
 A part that now WORKS where it did not before (a popup whose form can be typed in now, a button that opens now) is a fix
 M42 made to the page's own kit, never a fault.
+What shows only on hover or a click (a tooltip, a popover, a dropdown) is in the facts ("tooltips on hover"), never in
+a picture: judge it by the facts. A chart is in the facts too ("charts": its kind, labels, values drawn). What changes
+by itself (a clock, a timer, live numbers) shows as its current value in the picture: its digits are the thing.
 Answer {"why": what the page shows now against what was asked, in one or two plain sentences, "done": ...,
 "missing": what is still missing or wrong ("" when done)}."""
 
@@ -5527,7 +5579,10 @@ that as it is now (choose "" for what the user did not ask about). Answer {"why"
         for c in changes:
             for f, (after, _t) in afters.items():
                 pg_ = after.get("page") or {}
-                if c.get("colors"):
+                w_ = rgb((c.get("colors") or [""])[0])
+                plain = bool(w_) and (min(w_) >= 235 or max(w_) <= 30)  # (white / black: a page's background, no accent:
+                # "light mode" came with #ffffff, and the light page was judged "partly", its accent not white, 2026-11-18)
+                if c.get("colors") and not (plain and c.get("theme") in ("light", "dark")):
                     want, have = rgb(c["colors"][0]), rgb(pg_.get("accent"))
                     was = rgb(((self._edit_seen.get(f) or {}).get("page") or {}).get("accent"))
                     dist = lambda x, y: sum((p_ - q_) ** 2 for p_, q_ in zip(x, y)) ** .5
@@ -5570,6 +5625,24 @@ that as it is now (choose "" for what the user did not ask about). Answer {"why"
                              "button that does nothing, a style), or what no other kind can do"}
 
     def _edit_retry(self, site, changes, said, expected, verdict, afters, emit, base, model, key):
+        """🔁 Another way, else, when nothing else is left and it did not show at all, the change made once as a block
+        edit (domnode: the 4B writes the one block of the page it is about, anywhere on the page: a clock asked for in
+        the top bar was read as a new section twice, and undone, 2026-11-18)."""
+        got = self._edit_retry_ways(site, changes, said, expected, verdict, afters, emit, base, model, key)
+        if got or verdict.get("done") != "no" or "other" in self._edit_acts or not changes:
+            return got
+        c = changes[0]
+        if c.get("action") in ("other", "look", "design", "brand", "remove_section", "move_section", "swap_sections", "scene_part"):
+            return got
+        pg = sitedit.page(site, c.get("page")) or site["pages"][0]
+        self._edit_redo = dict(c, action="other", section=-1 if c.get("action") == "add_section" else c.get("section"))
+        self._edit_acts.add("other")
+        emit({"type": "note", "message": f"🔁 Not done yet ({verdict.get('missing') or verdict['why']}): trying it as one block "
+                                         "of the page written again (a block edit)"})
+        self._edit_tried = []
+        return [pg["file"]]
+
+    def _edit_retry_ways(self, site, changes, said, expected, verdict, afters, emit, base, model, key):
         """🔁 Another way for the part the change is about, chosen by the 4B from what each way shows. Returns the
         pages to draw again, or [] when there is no other way."""
         for c in changes:
@@ -6509,8 +6582,13 @@ line that you will do it if they send it as a change."""
                     raw_sec, timings = llm.complete_json(base, model, sitedit.section_messages(current, ask, part, context, ch.get("items") or "", ch.get("count") or 0),
                                                          sec_schema, max_tokens=1400, api_key=key)
                     self._emit_stats(emit, "section", timings)
-                except (llm.LLMError, ValueError, OSError):
+                except (llm.LLMError, ValueError, OSError) as e:
                     raw_sec = None
+                    if current and ch["action"] == "change_widget" and part:  # (the rewrite failed: the section's own
+                        # content in its new part, its data then fitted to that widget below; a "make it a table" changed
+                        # nothing and was undone, 2026-11-18)
+                        emit({"type": "note", "message": f"🧩 The section's rewrite failed ({str(e)[:80]}): its content kept, drawn as {part}"})
+                        raw_sec = {k_: v_ for k_, v_ in current.items() if not str(k_).startswith("_")}
                 if raw_sec:
                     want = part or (current or {}).get("part") or raw_sec.get("part") or "cards"
                     new_sec = pagebuild.clean({"sections": [dict(raw_sec, part=want)]},
@@ -6523,6 +6601,11 @@ line that you will do it if they send it as a change."""
                         new_sec["_style"] = shown["section"].get("what") or shown["section"].get("name") or ""
                         self.custom_cards([new_sec], site.get("asked", ""), emit)
                     self._name_columns({"sections": [new_sec]}, site.get("asked", ""), emit, model)  # (a table's headers)
+                    if want in widgets.WIDGETS:  # 📐 its data in the shape its widget draws (a bar chart added in an edit
+                        # came out with no bars: an empty section, undone, 2026-11-18), as a build's parts are
+                        self._fix_app_data({"sections": [new_sec]}, {"app_flow": True, "sections": [
+                            {"name": new_sec.get("title") or ch.get("what") or "", "what": ch.get("what") or message[:200], "part": want}]},
+                            site.get("asked", "") + chr(10) + message[:300], emit, model)
             if ch["action"] == "photos":  # 📷 real photos for a section's cards (searched, looked at), not words
                 note = self._photos_for_cards(root, site, pg, k, ch, emit)
                 if note:
@@ -6604,6 +6687,12 @@ line that you will do it if they send it as a change."""
                             text = codeedit.apply_edits(text, [ed])
                         except ValueError:
                             lost += 1  # (a fix inside the section that was just replaced)
+                    for ed in pg.get("hand_edits") or []:  # (the user's block edits by their own text: a carried diff's lines
+                        # around a clock in the top bar no longer matched after a section was removed, its <div> was lost
+                        # and its script threw on every second, 2026-11-18)
+                        if ed and ed[0] and ed[1] and ed[1] not in text and text.count(ed[0]) == 1:
+                            with contextlib.suppress(ValueError):
+                                text = codeedit.apply_edits(text, [ed])
                     if text != local:
                         self.workspace.write_file(pg["file"], text)
                     if lost:
@@ -7114,9 +7203,10 @@ about the page, and the request. Answer:
 - code: the WHOLE block written again with the change made: the same outer tag, every id, class and data-
   attribute kept (the page's script and CSS use them) unless the change is to them, the words not asked about kept
   as they are. The same code when the block needs no change.
-- add: code the change needs OUTSIDE the block (a <style> rule, a <script>), else "". Use only the page's own
-  libraries listed in the facts (a <script src="lib/..."> for one the page does not load yet), never a link to
-  another site.
+- add: code the change needs OUTSIDE the block (a <style> rule, a <script>), else "". What must change or move by
+  itself (a clock, a timer, a counter, live numbers) or answer a click needs its <script> here, complete: an empty
+  element with no script shows nothing. Use only the page's own libraries listed in the facts (a <script
+  src="lib/..."> for one the page does not load yet), never a link to another site.
 - where: "head_end" (before </head>, for a <style>), "body_end" (before </body>, for a <script>), or "" when add
   is "".
 - why: one short sentence for the user: what you changed; or, when this block cannot do what was asked, why.
@@ -7179,7 +7269,12 @@ No ``` fences."""
         values = codeedit.css_colours(root_, old)
         colours = [f"{k} = {v}" for k, v in sorted(values.items())][:20]
         par = nodes.get(n["parent"])
+        # (the page's script rewrote .m42-topuser's inside: a clock put there was gone as soon as the page ran, and the
+        # change was undone twice, 2026-11-18)
+        used_ = sorted(x for x in domnode.hooks(old, block) if not x.startswith((".d-", ".col", ".row")))
         facts = (f"The page: {name}. The block is inside <{domnode._label(par)}>." if par else f"The page: {name}.") + \
+            (f"\nThe page's own script uses {', '.join(used_[:8])} in this block (it may write their inside): put a NEW "
+             "thing next to them, never inside them." if used_ else "") + \
             f"\nThe page's own scripts in lib/: {', '.join(libs) or 'none'}; it loads: {', '.join(loaded) or 'no script'}." + \
             ("\nThe page's colour variables: " + "; ".join(colours) if colours else "")
         msgs = [{"role": "system", "content": self.NODE_EDIT_PROMPT},
@@ -7207,9 +7302,17 @@ No ``` fences."""
                 problem = "The code opens or closes a different number of tags than the block: write the whole block, every tag closed."
             else:
                 lost = domnode.lost_hooks(old, block, code)
+                # (a new element left empty with nothing to fill it: a clock's <span id="clock"></span> and no script,
+                # an empty top bar, undone, 2026-11-18)
+                scripts_ = " ".join(re.findall(r"<script\b[^>]*>(.*?)</script>", old + code + add, re.S | re.I))
+                empty_ = [i for i in re.findall(r'\bid="([^"]+)"[^>]*>\s*</', code)
+                          if f'id="{i}"' not in block and i not in scripts_]
                 if lost:
                     problem = (f"The code lost {', '.join(lost)}: the page's script or CSS uses them. Keep them "
                                "(on the same elements) and make the change.")
+                elif empty_:
+                    problem = (f"#{empty_[0]} is empty and no script fills it: it shows nothing. Put its <script> in add "
+                               "(complete, filling it now and as it changes).")
             if not problem:
                 break
             if attempt:
