@@ -28,6 +28,10 @@ that folder (HTML, Bootstrap, its own UI kit), checks it in a headless browser, 
 It runs one small model, **Qwen3.5-4B** (or **Qwen3.5-2B** on an 8 GB PC), through [llama.cpp](https://github.com/ggml-org/llama.cpp). It is made
 for an ordinary CPU (tested on a Ryzen 5 5600G with 16 GB RAM: about 10 tokens/s).
 
+> [!TIP]
+> **Want to try it?** The install steps are [further down this page](#-install), below the examples and the support
+> section: one installer for Windows, macOS and Linux.
+
 ## <img src="docs/icons/sparkles.svg" width="30" height="30" alt="" align="top"> Features
 
 | | | |
