@@ -1,0 +1,48 @@
+# The optional 3D pack: a tag 3d-pack-v<N> pushed (python m42/publish.py 3d-pack) -> the pack built again from
+# Polyfork (pack3d.py build: one model at a time, politely) and put on the release "3d-pack" in place of the old
+# files. It stays a pre-release, so it is never the app's "Latest". Apps whose pack is older refresh it after their
+# next app update (updater.py -> pack3d.py refresh).
+name: 3D pack
+
+on:
+  push:
+    tags: ["3d-pack-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The tag and pack3d.VERSION agree
+        run: |
+          V=$(python -c "import sys; sys.path.insert(0, 'm42'); import pack3d; print(pack3d.VERSION)")
+          if [ "3d-pack-v$V" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::m42/pack3d.py says VERSION $V but the tag is $GITHUB_REF_NAME: no pack."
+            exit 1
+          fi
+
+      - name: Build the pack from Polyfork
+        run: python -u m42/pack3d.py build
+
+      - name: Zip it
+        run: python m42/pack3d.py zip
+
+      - name: Put it on the release "3d-pack"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view 3d-pack >/dev/null 2>&1; then
+            gh release create 3d-pack --title "3D pack" --prerelease --latest=false \
+              --notes "Optional 3D models for M42 UI: free low-poly models by Polyfork (CC BY 4.0). Install: python m42/pack3d.py install"
+          fi
+          gh release upload 3d-pack dist/M42-3D-pack.zip dist/M42-3D-pack.zip.sha256 --clobber
+          gh release edit 3d-pack --prerelease --latest=false

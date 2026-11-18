@@ -1,0 +1,53 @@
+# M42 UI release: a tag v<version> pushed (python m42/publish.py app <version>) -> the release zip, its SHA-256 and the
+# release on GitHub, marked Latest. Every M42 UI that checks for updates (updater.py) then offers it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: The tag and m42/version.py agree
+        run: |
+          V=$(python -c "import sys; sys.path.insert(0, 'm42'); from version import VERSION; print(VERSION)")
+          if [ "v$V" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::m42/version.py says $V but the tag is $GITHUB_REF_NAME: no release."
+            exit 1
+          fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: Release files (zip + SHA-256)
+        run: python m42/release.py
+
+      - name: Release notes (the tag's message, else the commits since the last release)
+        run: |
+          git fetch --force --tags origin
+          NOTES=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed '/-----BEGIN PGP/,$d')
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ] || [ "$NOTES" = "$(git log -1 --format=%B)" ]; then
+            PREV=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+            NOTES=$(git log --no-merges --format='- %s' ${PREV:+$PREV..}"$GITHUB_REF_NAME")
+          fi
+          printf '%s\n' "$NOTES" > notes.md
+          cat notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/M42-UI-$VERSION.zip" "dist/M42-UI-$VERSION.zip.sha256" \
+            --title "M42 UI $VERSION" --notes-file notes.md --latest --verify-tag

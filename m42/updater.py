@@ -291,8 +291,24 @@ def apply_zip(zip_path, expect=None, verified=False, progress=None, pip=True):
         r = subprocess.run([_python(), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")],
                            cwd=ROOT, capture_output=True, text=True)
         packages = "updated" if r.returncode == 0 else "error: " + (r.stderr or r.stdout)[-600:]
+    pack = _refresh_3d_pack(progress) if pip else "skipped"
     return {"state": "done", "from": VERSION, "to": new_ver, "verified": verified, "backup": str(backup),
-            "replaced": len(replaced), "added": len(added), "removed": len(stale), "packages": packages}
+            "replaced": len(replaced), "added": len(added), "removed": len(stale), "packages": packages,
+            "pack3d": pack}
+
+
+def _refresh_3d_pack(progress=None):
+    """📦 The optional 3D pack follows the app (the user, 2026-11-18: "the 3D pack must update by itself too"): when it
+    is installed and the new release's pack3d.py wants a newer pack, the new pack3d.py downloads it (its own process:
+    this one still has the old code loaded). "none" when it is not installed, "current", "updated" or "error: ..."."""
+    script = ROOT / "m42" / "pack3d.py"
+    if not script.is_file():
+        return "none"
+    if progress:
+        progress("3d pack", 0, 0)
+    r = subprocess.run([_python(), str(script), "refresh"], cwd=ROOT, capture_output=True, text=True)
+    out = (r.stdout or "").strip().splitlines()
+    return (out[-1] if out else "current") if r.returncode == 0 else "error: " + (r.stderr or r.stdout)[-300:]
 
 
 def apply(info=None, progress=None, pip=True):

@@ -8,6 +8,7 @@ page's footer), as CC BY asks.
     python m42/pack3d.py status             is the pack here, how many models
     python m42/pack3d.py install [--yes]    download it from M42 UI's GitHub release (SHA-256 checked) and unpack
     python m42/pack3d.py remove [--yes]     delete it (the app works without it)
+    python m42/pack3d.py refresh            a newer pack when one is installed and this app wants a newer one
   for the maker of a release:
     python m42/pack3d.py build              fetch the models from Polyfork, one by one (resumes; skips the ones here)
     python m42/pack3d.py zip                dist/M42-3D-pack-<v>.zip and its .sha256, for the release "3d-pack"
@@ -27,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 PACK = HERE / "packs" / "models3d"
-VERSION = "1"
+VERSION = "1"  # the pack this app wants: publish.py 3d-pack raises it, and an app update then refreshes the pack
 REPO = "M42TECHY/M42-UI"
 TAG = "3d-pack"  # (its own release, apart from the app's: an app update never downloads it again)
 ZIP_NAME = "M42-3D-pack.zip"
@@ -242,6 +243,19 @@ def main(argv):
             print(f"\nThe 3D pack did not install: {e}")
             return 1
         print(f"\n3D pack ready: {st['models']} models.")
+    elif cmd == "refresh":  # (the updater, after an app update: a newer pack only where one is installed)
+        st = status()
+        if not st["installed"]:
+            print("none")
+        elif str(st["version"]) == str(VERSION):
+            print("current")
+        else:
+            try:
+                st = install()
+            except (OSError, RuntimeError) as e:
+                print(f"The 3D pack was not refreshed: {e}", file=sys.stderr)
+                return 1
+            print(f"updated to pack {st['version']} ({st['models']} models)")
     elif cmd == "remove":
         if yes or input("Delete the 3D pack? [y/N] ").strip().lower() in ("y", "yes"):
             remove()
