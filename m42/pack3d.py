@@ -33,7 +33,11 @@ TAG = "3d-pack"  # (its own release, apart from the app's: an app update never d
 ZIP_NAME = "M42-3D-pack.zip"
 URL = f"https://github.com/{REPO}/releases/download/{TAG}/{ZIP_NAME}"
 CATALOG = "https://raw.githubusercontent.com/lucas-martinic/polyfork-catalog/main/catalog.json"
-UA = {"User-Agent": "M42-UI/0.9 (local website builder; 3D pack)"}
+try:
+    from version import VERSION as _APP
+except ImportError:
+    _APP = "1"
+UA = {"User-Agent": f"M42-UI/{_APP} (local website builder; 3D pack)"}
 KITS = ["Modern Restaurant Cafe kit", "Hospital kit", "Office", "Research Lab", "University", "Hotel Casino kit",
         "New York City Kit", "Airport", "Retro Cars Kit", "3D UI kit", "Construction Site", "Nature & Forest Kit",
         "Cozy Farm", "Symphony Stagecraft kit"]
