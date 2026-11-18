@@ -950,3 +950,20 @@ dialog::backdrop { background: rgba(8, 10, 16, .55); backdrop-filter: blur(3px);
 .m42-update-note .upd-text span { opacity: .8; font-size: 13px; }
 .m42-update-note .upd-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .m42-update-note button.ghost { background: transparent; color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
+
+/* 🌙 the dark system theme (Linux with a dark GTK theme, 2026-11-18: the sidebar stayed white, its words too faint to
+   read, beside a dark page): the colours the Claude-like skin above wrote as light, in the dark theme's own */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --user-bg: #2a3446; }
+  :root:not([data-theme="light"]) .sidebar { background: var(--panel); }
+  :root:not([data-theme="light"]) .msg.user .bubble { background: #2a3446; border-color: #3a4a66; color: var(--text); }
+  :root:not([data-theme="light"]) .sb-item:hover, :root:not([data-theme="light"]) .sb-menu-item:hover,
+  :root:not([data-theme="light"]) .sb-menu-item:focus-visible,
+  :root:not([data-theme="light"]) .sidebar .proj-item:hover, :root:not([data-theme="light"]) .sidebar .chat-item:hover { background: rgba(255, 255, 255, .06); }
+  :root:not([data-theme="light"]) .sidebar .proj-item.active, :root:not([data-theme="light"]) .sidebar .chat-item.active,
+  :root:not([data-theme="light"]) .proj-arrow:hover, :root:not([data-theme="light"]) .proj-more:hover { background: rgba(255, 255, 255, .09); }
+  :root:not([data-theme="light"]) .proj-chats { border-left-color: rgba(255, 255, 255, .10); }
+  :root:not([data-theme="light"]) .sb-menu { background: var(--panel-2); border-color: var(--border); }
+  :root:not([data-theme="light"]) .mk-stage { background: var(--bg); }
+  :root:not([data-theme="light"]) .composer { box-shadow: 0 0 0 1px rgba(255, 255, 255, .04) inset, 0 4px 12px rgba(0, 0, 0, .25); }
+}

@@ -11,6 +11,8 @@ will download with the sizes, asks, downloads, makes the launcher, and starts th
     python m42/setup.py --models-dir E:/M42-models   where the models go (asked otherwise, once on a PC)
 Only the standard library is used here (firstrun.py)."""
 import argparse
+import shutil
+import contextlib
 import os
 import platform
 import stat
@@ -82,16 +84,41 @@ def make_launcher():
         f = ROOT / "Start M42 UI.sh"
     f.write_text(f'#!/bin/sh\ncd "$(dirname "$0")"\nexec "{py}" "{app}" "$@"\n', encoding="utf-8")
     f.chmod(f.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    if platform.system() == "Linux":  # an entry in the apps menu
+    if platform.system() == "Linux":  # an entry in the apps menu, and an icon on the desktop
         apps = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "applications"
+        icon = ROOT / "m42" / "ui" / "favicon-256.png"
+        entry = ("[Desktop Entry]\nType=Application\nName=M42 UI\nComment=Build web pages with a local AI\n"
+                 f'Exec="{f}"\nIcon={icon}\nTerminal=false\nCategories=Development;\n')
         try:
             apps.mkdir(parents=True, exist_ok=True)
-            icon = ROOT / "m42" / "ui" / "favicon-256.png"
-            (apps / "m42-ui.desktop").write_text(
-                "[Desktop Entry]\nType=Application\nName=M42 UI\nComment=Build web pages with a local AI\n"
-                f'Exec="{f}"\nIcon={icon}\nTerminal=false\nCategories=Development;\n', encoding="utf-8")
+            (apps / "m42-ui.desktop").write_text(entry, encoding="utf-8")
         except OSError:
             pass
+        linux_desktop_icon(entry)
+    return f
+
+
+def linux_desktop_icon(entry):
+    """🖥 M42 UI's icon on the Linux desktop too (the user, 2026-11-18: "after install, an icon to open it, not a
+    command"): the desktop folder as the system names it (xdg-user-dir: "Desktop", "Schreibtisch"...), the launcher
+    made executable and marked trusted, so GNOME opens it with no "Allow Launching" step. Nothing when the PC has no
+    desktop folder."""
+    desk = ""
+    if shutil.which("xdg-user-dir"):
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            desk = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True, timeout=5).stdout.strip()
+    desk = Path(desk) if desk and Path(desk) != Path.home() else Path.home() / "Desktop"
+    if not desk.is_dir():
+        return None
+    f = desk / "m42-ui.desktop"
+    try:
+        f.write_text(entry, encoding="utf-8")
+        f.chmod(f.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    except OSError:
+        return None
+    if shutil.which("gio"):
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            subprocess.run(["gio", "set", str(f), "metadata::trusted", "true"], capture_output=True, timeout=5)
     return f
 
 

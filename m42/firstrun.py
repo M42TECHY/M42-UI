@@ -395,6 +395,26 @@ def _fetch(url, dest, size, sha256, label):
     part.replace(dest)
 
 
+TRIES = 6  # (a connection reset at 98% of 3.6 GB stopped a Linux install, 2026-11-18: "run this again")
+
+
+def _fetch_retrying(item, dest, tries=TRIES, wait=(3, 6, 12, 24, 45)):
+    """_fetch again after a dropped connection (reset, timeout, a short read), each time from where it stopped (its
+    .part file, its bytes already counted on the bar). Raises the last error when every try failed."""
+    for n in range(tries):
+        try:
+            _fetch(item["url"], dest, item["size"], item["sha"], item["label"])
+            return
+        except (OSError, ValueError) as e:  # (urllib's errors are OSErrors; a checksum miss deletes the .part)
+            last = e
+            with _lock:
+                state["step"] = f'{item["label"]}: the connection dropped, trying again ({n + 1} of {tries - 1})'
+            if n + 1 >= tries or ("checksum" in str(e) and n >= 1):  # (a wrong file is fetched whole again: once)
+                break
+            time.sleep(wait[min(n, len(wait) - 1)])
+    raise last
+
+
 def _unpack(archive, target, exe):
     """A release archive into `target`: the folder that holds `exe`, its files at the top."""
     tmp = Path(tempfile.mkdtemp(prefix="m42-unpack-"))
@@ -434,7 +454,7 @@ def run(items=None, tier=None, on_step=None):
             if on_step:
                 on_step(item["label"], n, len(items))
             dest = Path(item["dest"])
-            _fetch(item["url"], dest, item["size"], item["sha"], item["label"])
+            _fetch_retrying(item, dest)
             if item["kind"] == "llama":
                 _unpack(dest, LLAMA / item["folder"], SERVER)
             elif item["kind"] == "whisper":

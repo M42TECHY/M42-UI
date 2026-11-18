@@ -1002,22 +1002,68 @@ def prepare_backend():
     threading.Thread(target=work, daemon=True).start()
 
 
-def pick_folder(initial, title=None):
-    """Native folder picker via tkinter (stdlib). Returns '' if cancelled or unavailable."""
+# 📂 the native pickers, each in a process of its own: Tk made in one of the server's request threads, then again in
+# another, aborts the whole process on Linux ("Tcl_AsyncDelete: async handler deleted by the wrong thread"): a second
+# Open folder took the app server down, "Failed to fetch" (2026-11-18). A Linux desktop's own dialog when it has one.
+PICK_SCRIPT = r"""
+import json, sys
+a = json.loads(sys.argv[1])
+import tkinter
+from tkinter import filedialog
+root = tkinter.Tk()
+root.withdraw()
+root.attributes("-topmost", True)
+root.update()
+if a["kind"] == "folder":
+    got = filedialog.askdirectory(parent=root, initialdir=a["initial"], mustexist=True, title=a["title"])
+else:
+    got = filedialog.askopenfilename(parent=root, initialdir=a["initial"], title=a["title"],
+                                     filetypes=[tuple(x) for x in a["types"]])
+root.destroy()
+open(a["out"], "w", encoding="utf-8").write(got or "")  # (a file: pythonw.exe has no stdout)
+"""
+
+
+def _native_pick(kind, initial, title, types=()):
+    """A folder or a file chosen in the system's dialog: zenity / kdialog on a Linux desktop that has one, else Tk in a
+    process of its own. '' when cancelled or no dialog could open."""
+    initial = str(initial or Path.home())
+    if sys.platform.startswith("linux"):
+        z, k = shutil.which("zenity"), shutil.which("kdialog")
+        try:
+            if z:
+                cmd = [z, "--file-selection", f"--title={title}", f"--filename={initial.rstrip('/')}/"]
+                if kind == "folder":
+                    cmd.append("--directory")
+                else:
+                    cmd += [f"--file-filter={name} | {pat}" for name, pat in types]
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                return r.stdout.strip() if r.returncode == 0 else ""
+            if k:
+                cmd = [k, "--title", title] + (["--getexistingdirectory", initial] if kind == "folder" else
+                                               ["--getopenfilename", initial, " ".join(p for _n, p in types[:1])])
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                return r.stdout.strip() if r.returncode == 0 else ""
+        except OSError:
+            pass
+    import tempfile
+    fd, out = tempfile.mkstemp(prefix="m42-pick-", suffix=".txt")
+    os.close(fd)
     try:
-        import tkinter
-        from tkinter import filedialog
-    except ImportError:
+        subprocess.run([sys.executable, "-c", PICK_SCRIPT, json.dumps(
+            {"kind": kind, "initial": initial, "title": title, "types": [list(t) for t in types], "out": out})],
+            capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return Path(out).read_text(encoding="utf-8").strip()
+    except OSError:
         return ""
-    root = tkinter.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)  # the dialog is owned by this window, so it opens above M42
-    root.update()
-    try:
-        return filedialog.askdirectory(parent=root, initialdir=initial, mustexist=True,
-                                       title=title or PICKER_TITLE) or ""
     finally:
-        root.destroy()
+        with contextlib.suppress(OSError):
+            os.unlink(out)
+
+
+def pick_folder(initial, title=None):
+    """Native folder picker. Returns '' if cancelled or unavailable."""
+    return _native_pick("folder", initial, title or PICKER_TITLE)
 
 
 PICKER_TITLE = "Choose a project folder"
@@ -1025,20 +1071,8 @@ PICKER_TITLE = "Choose a project folder"
 
 def pick_model_file(initial):
     """Native file picker for a 🔌 plugin model. Returns '' if cancelled or unavailable."""
-    try:
-        import tkinter
-        from tkinter import filedialog
-    except ImportError:
-        return ""
-    root = tkinter.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    root.update()
-    try:
-        return filedialog.askopenfilename(parent=root, initialdir=initial, title="Choose a model file", filetypes=[
-            ("Models", "*.onnx *.safetensors *.pth *.pt *.ckpt"), ("All files", "*.*")]) or ""
-    finally:
-        root.destroy()
+    return _native_pick("file", initial, "Choose a model file",
+                        [("Models", "*.onnx *.safetensors *.pth *.pt *.ckpt"), ("All files", "*")])
 
 
 AUDIO_URL_RX = re.compile(r"^data:audio/(wav|x-wav|wave|mpeg|mp3|flac|x-flac|ogg|webm|mp4|x-m4a|m4a|aac);base64,")
@@ -1050,20 +1084,7 @@ AUDIO_URL_RX = re.compile(r"^data:audio/(wav|x-wav|wave|mpeg|mp3|flac|x-flac|ogg
 
 def pick_gguf(initial):
     """Native file picker for the user's own model (.gguf). Returns '' if cancelled or unavailable."""
-    try:
-        import tkinter
-        from tkinter import filedialog
-    except ImportError:
-        return ""
-    root = tkinter.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    root.update()
-    try:
-        return filedialog.askopenfilename(parent=root, initialdir=initial, title="Choose your model (.gguf)",
-                                          filetypes=[("GGUF model", "*.gguf"), ("All files", "*.*")]) or ""
-    finally:
-        root.destroy()
+    return _native_pick("file", initial, "Choose your model (.gguf)", [("GGUF model", "*.gguf"), ("All files", "*")])
 
 
 class Handler(BaseHTTPRequestHandler):
