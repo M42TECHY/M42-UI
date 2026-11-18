@@ -1739,8 +1739,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._stream(message, "👀 " + message, "chat", lambda emit: clone_again(message, emit), warm=False)
         if webclone.wants_clone(message) and web.urls_in(message) and llamacpp.vision_model() and agent._web_enabled():
             return self._stream(message, "🌐 " + message, None, lambda emit: clone_site(message, emit))
-        if not sitedit.load(agent.workspace.roots[0][1]):  # an empty folder: a page to build
-            return self._stream(message, "🎨 " + message, "chat", lambda emit: web_request(message, emit))
+        if not sitedit.load(agent.workspace.roots[0][1]):  # an empty folder: a page to build, or only talk (the 4B decides)
+
+            def build_or_talk(emit):
+                agent.stop_event.clear()
+                if agent.message_intent(message, emit) == "chat":  # ("Hi" built a portfolio site, 2026-11-18)
+                    return agent.answer_chat(message, emit)
+                return web_request(message, emit)
+            return self._stream(message, message, "chat", build_or_talk)
 
         picked = agent.pick_node(pick) if pick else None
         if picked and message:  # 🎯 the user clicked a part of the preview and says what to change in it: an edit there

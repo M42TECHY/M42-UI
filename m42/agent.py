@@ -6122,6 +6122,61 @@ the start of its page are below). Answer in the user's language (Tamil / Tanglis
 plain. You change NOTHING: when the message is really a change ("add", "pannu", "maathu", "remove"), say in one
 line that you will do it if they send it as a change."""
 
+    INTENT_PROMPT = """M42 UI builds web pages, sites and app screens in the user's folder (the folder is empty now). Read
+the user's message (any language: English, Tamil letters, Tanglish). Answer "translation" first: the user's own
+message in plain English, word for word as THEY said it (a translation, never your answer to it); then "asks": what
+the user asks of M42, in a few words; then kind:
+- "build": it asks for a page, site, app, screen or design to be made (even in a few words: "bakery website",
+  "school admin panel pannu", "oru portfolio page venum");
+- "chat": a greeting, thanks, a question about M42 or about anything, small talk, or words that ask for nothing to be
+  built ("hi", "how are you", "what can you do?", "nee yaaru?")."""
+
+    CHAT_PROMPT = """You are M42 UI, a local AI that builds web pages, sites and app screens (landing pages, admin panels, POS,
+ERP, CRM, dashboards, 3D pages) in the user's open folder, and changes them when they ask. Answer the user's message
+in a few friendly sentences, in the language they wrote in (Tamil letters, Tanglish or English). When it is a greeting
+or a question about what you do, end with one or two example requests they could send (e.g. "a landing page for my
+bakery in Madurai", "a school admin panel with attendance and fees"). Never claim you built or changed anything."""
+
+    def message_intent(self, message, emit=None):
+        """🗨 In an empty folder: is the message a page to build, or talk ("Hi" built a whole portfolio site, 2026-11-18)?
+        The 4B decides. "build" when it cannot be asked (a build is what the folder is for)."""
+        try:
+            raw, timings = llm.complete_json(llamacpp.base_url_for(self.config), self.active_model(), [
+                {"role": "system", "content": self.INTENT_PROMPT + chr(10) * 2 + sitedit.LANGUAGE},  # (Tamil letters read too:
+                # "நீ என்ன பண்ணுவ?" was copied as it was, never read, and taken for a build, 2026-11-18)
+                {"role": "user", "content": str(message)[:600]}],
+                {"type": "object", "properties": {"translation": {"type": "string", "maxLength": 200},
+                                                  "asks": {"type": "string", "maxLength": 80},
+                                                  "kind": {"type": "string", "enum": ["build", "chat"]}},
+                 "required": ["translation", "asks", "kind"]}, max_tokens=110, api_key=self.config.get("api_key") or None)
+            if emit:
+                self._emit_stats(emit, "message kind", timings)
+            return raw.get("kind") or "build"
+        except (llm.LLMError, ValueError, OSError):
+            return "build"
+
+    def answer_chat(self, message, emit):
+        """A greeting or a question in an empty folder: answered in a few words, nothing built."""
+        msgs = [{"role": "system", "content": self.CHAT_PROMPT}] + self.messages[-6:] + [{"role": "user", "content": message}]
+        emit({"type": "assistant_start"})
+        text, result = "", None
+        try:
+            for kind, value in llm.stream_chat(llamacpp.base_url_for(self.config), self.active_model(), msgs, tools=None,
+                                               temperature=0.4, max_tokens=300, api_key=self.config.get("api_key") or None,
+                                               should_stop=self.stop_event.is_set):
+                if kind == "text":
+                    text += value
+                    emit({"type": "delta", "text": value})
+                else:
+                    result = value
+        except llm.LLMError as e:
+            emit({"type": "error", "message": str(e)})
+        self._emit_stats(emit, "answer", (result or {}).get("timings"))
+        text = (result or {}).get("content") or text
+        emit({"type": "assistant_text", "text": text})
+        self.messages += [{"role": "user", "content": message}, {"role": "assistant", "content": text}]
+        emit({"type": "done"})
+
     def answer_about_site(self, message, emit):
         """A question about the built page ("intha page la enna font?"): answered from its outline and page, with no
         tools (the general agent, given "ithula innoru point add pannu" as a question, edited index.html by hand and
